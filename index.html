@@ -849,7 +849,8 @@
             const [output, setOutput] = useState('');
             const [aesMode, setAesMode] = useState('CBC');
             const [aesPadding, setAesPadding] = useState('Pkcs7');
-            const [keyFormat, setKeyFormat] = useState('utf8'); // utf8 or hex
+            const [aesKeySize, setAesKeySize] = useState('256'); // Added State
+            const [keyFormat, setKeyFormat] = useState('utf8'); 
             const [rsaKeySize, setRsaKeySize] = useState('1024');
             const [rsaPriv, setRsaPriv] = useState('');
             const [rsaPub, setRsaPub] = useState('');
@@ -882,12 +883,28 @@
             };
 
             const loadExample = () => {
-                const ex = examples[mode];
-                if(ex) {
-                    setKey(ex.key);
-                    setIv(ex.iv);
-                    setInput(ex.input);
-                    if(mode === 'rsa') genRsa();
+                // Reset to UTF8 for examples as they are text strings
+                setKeyFormat('utf8'); 
+
+                if (mode === 'aes') {
+                    // Import key based on selected size
+                    const size = parseInt(aesKeySize);
+                    let testKey = "";
+                    if (size === 128) testKey = "1234567890123456"; // 16 chars
+                    else if (size === 192) testKey = "123456789012345678901234"; // 24 chars
+                    else testKey = "12345678901234567890123456789012"; // 32 chars (256-bit)
+                    
+                    setKey(testKey);
+                    setIv("1234567890123456"); // AES Block size is always 16 bytes
+                    setInput(`Test Message for AES-${size}`);
+                } else {
+                    const ex = examples[mode];
+                    if(ex) {
+                        setKey(ex.key);
+                        setIv(ex.iv);
+                        setInput(ex.input);
+                        if(mode === 'rsa') genRsa();
+                    }
                 }
             };
 
@@ -911,16 +928,7 @@
                         if(parsedIv) opts.iv = parsedIv;
                     }
 
-                    // Key parsing:
-                    // If keyFormat is hex, parse it.
-                    // If utf8, we usually rely on CryptoJS default. 
-                    // BUT: Passing a string to encrypt() triggers PBKDF2 (random salt).
-                    // To force deterministic encryption with a string key, we MUST parse it to a WordArray.
                     let parsedKey = parseInput(key, keyFormat);
-                    
-                    // Fallback: if empty/null, use raw key string (will fail later if empty)
-                    // If parseInput returns something, use it.
-                    // IMPORTANT: For Rabbit/RC4, we MUST use parsedKey to avoid random salt if we want deterministic behavior.
                     
                     if(mode === 'aes') {
                         if(!key) throw new Error("Key Required");
@@ -936,13 +944,10 @@
                         else res = CryptoJS.TripleDES.decrypt(input, parsedKey, opts).toString(CryptoJS.enc.Utf8);
                     }
                     else if(mode === 'rabbit') {
-                        // Rabbit: if we pass a string, it uses PBE (salt). If we pass WordArray, it uses raw key.
-                        // We use parsedKey to ensure determinism.
                         if(action === 'encrypt') res = CryptoJS.Rabbit.encrypt(input, parsedKey, opts).toString();
                         else res = CryptoJS.Rabbit.decrypt(input, parsedKey, opts).toString(CryptoJS.enc.Utf8);
                     }
                     else if(mode === 'rc4') {
-                        // RC4: Same logic.
                         if(action === 'encrypt') res = CryptoJS.RC4.encrypt(input, parsedKey, opts).toString();
                         else res = CryptoJS.RC4.decrypt(input, parsedKey, opts).toString(CryptoJS.enc.Utf8);
                     }
@@ -968,6 +973,13 @@
                     }
                     setOutput(res || "Empty Result / Error");
                 } catch(e) { setOutput("Error: " + e.message); }
+            };
+
+            const generateAesKey = () => {
+                const bytes = parseInt(aesKeySize) / 8;
+                const randomKey = CryptoJS.lib.WordArray.random(bytes).toString(); // Hex string
+                setKey(randomKey);
+                setKeyFormat('hex');
             };
 
             const genRsa = () => {
@@ -1018,6 +1030,19 @@
                             {/* Configs for AES/DES */}
                             {(mode === 'aes' || mode === 'des') && (
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-monokai-sidebar p-3 rounded border border-monokai-card">
+                                    {mode === 'aes' && (
+                                        <div>
+                                            <label className="block text-[10px] text-monokai-dim mb-1">Key Size</label>
+                                            <div className="flex gap-1">
+                                                <select value={aesKeySize} onChange={e=>setAesKeySize(e.target.value)} className="w-full bg-monokai-card text-xs p-1 rounded outline-none">
+                                                    <option value="128">128-bit</option>
+                                                    <option value="192">192-bit</option>
+                                                    <option value="256">256-bit</option>
+                                                </select>
+                                                <button onClick={generateAesKey} title="Generate Random Key" className="bg-monokai-green text-black px-2 rounded font-bold text-xs">Gen</button>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div>
                                         <label className="block text-[10px] text-monokai-dim mb-1">Mode</label>
                                         <select value={aesMode} onChange={e=>setAesMode(e.target.value)} className="w-full bg-monokai-card text-xs p-1 rounded outline-none">
