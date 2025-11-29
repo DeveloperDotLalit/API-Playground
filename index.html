@@ -415,6 +415,7 @@
                             </div>
                         )}
                     </div>
+                    {showCurlModal && <CurlImportModal onClose={()=>setShowCurlModal(false)} onImport={importCurl} />}
                 </div>
             );
         };
