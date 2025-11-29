@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playground | The Developer Workbench</title>
+    
+    <!-- React & DOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- CryptoJS (Symmetric) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <!-- JSEncrypt (RSA) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.3.2/jsencrypt.min.js"></script>
+
+    <!-- Tailwind Config for Monokai Pro Theme -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        monokai: {
+                            bg: '#2D2A2E',
+                            sidebar: '#19181A',
+                            card: '#403E41',
+                            accent: '#FFD866', // Yellow
+                            pink: '#FF6188',
+                            orange: '#FC9867',
+                            green: '#A9DC76',
+                            purple: '#AB9DF2',
+                            blue: '#78DCE8',
+                            text: '#fcfcfa',
+                            dim: '#939293',
+                            black: '#131313'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
+                        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #403E41; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #78DCE8; }
+        
+        /* Utils */
+        .code-font { font-family: 'Menlo', 'Monaco', monospace; }
+        
+        /* Diff Colors */
+        .diff-add { background-color: rgba(169, 220, 118, 0.2); }
+        .diff-rem { background-color: rgba(255, 97, 136, 0.2); }
+        .diff-empty { background-color: repeating-linear-gradient(45deg, #2d2a2e, #2d2a2e 10px, #333 10px, #333 20px); opacity: 0.5; }
+        .diff-change { background-color: rgba(252, 152, 103, 0.2); }
+
+        /* Syntax Highlighting */
+        .json-key { color: #FC9867; font-weight: bold; }
+        .json-string { color: #FFD866; }
+        .json-number { color: #AB9DF2; }
+        .json-boolean { color: #FF6188; font-weight: bold; }
+        .json-null { color: #939293; font-style: italic; }
+        
+        /* Pre Wrapping */
+        pre { margin: 0; }
+        .soft-wrap { white-space: pre-wrap; word-wrap: break-word; }
+        .no-wrap { white-space: pre; overflow-x: auto; }
+        .fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 50; background: #2D2A2E; padding: 20px; }
+    </style>
+</head>
+<body class="bg-monokai-bg text-monokai-text h-screen w-screen overflow-hidden text-sm selection:bg-monokai-pink selection:text-white">
+    <div id="root" class="h-full w-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+        // ==========================================
+        // SECTION: SHARED UTILS & ICONS
+        // ==========================================
+        
+        const Icon = ({ path, size = 5, className, onClick }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`w-${size} h-${size} ${className || ''}`} onClick={onClick}>
+                {path}
+            </svg>
+        );
+
+        const Icons = {
+            Zap: <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />,
+            Shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+            FileText: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" />,
+            Key: <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />,
+            Copy: <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2 M16 4h2a2 2 0 0 1 2 2v4 M21 14H11a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2z" />,
+            Trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
+            Globe: <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-2 6a8 8 0 0 1 14.2 0M6 10a8 8 0 0 1 14.2 0M4 14a8 8 0 0 1 14.2 0" />,
+            Plus: <path d="M12 5v14M5 12h14" />,
+            Play: <path d="M5 3l14 9-14 9V3z" />,
+            Info: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z M12 8v.01 M12 11v5" />,
+            Wrap: <path d="M3 6h18M3 12h15a3 3 0 0 1 0 6h-4M16 16l-2 2 2 2" />,
+            Maximize: <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />,
+            Minimize: <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />,
+            Download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,
+            Lock: <path d="M19 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2zm-7-9a2 2 0 0 1 2 2v5h-4V4a2 2 0 0 1 2-2z" />,
+            Unlock: <path d="M7 11V7a5 5 0 0 1 10 0v4" />,
+            ChevronRight: <path d="M9 18l6-6-6-6" />,
+            Terminal: <path d="M4 17l6-6-6-6M12 19h8" />
+        };
+
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+        const safeJSON = (str) => { try { return JSON.stringify(JSON.parse(str), null, 2); } catch(e) { return str; }};
+        const copyToClipboard = (txt) => {
+            if(!txt) return;
+            navigator.clipboard.writeText(txt).catch(err => {
+                const el = document.createElement('textarea');
+                el.value = txt;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+            });
+        };
+        const Base64Url = {
+            stringify: (wordArray) => {
+                let str = CryptoJS.enc.Base64.stringify(wordArray);
+                return str.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+            },
+            parse: (str) => {
+                let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                let pad = base64.length % 4;
+                if(pad) base64 += new Array(5-pad).join('=');
+                return CryptoJS.enc.Base64.parse(base64);
+            }
+        };
+
+        // ==========================================
+        // MODULE: API FORGE
+        // ==========================================
+        const ApiSidebar = ({ workspaces, activeWorkspace, activeWorkspaceId, setActiveWorkspaceId, activeRequestId, setActiveRequestId, setWorkspaces, generateId, setEnvModal, onImport, onExport }) => {
+            const [isEditing, setIsEditing] = useState(false);
+            const [editName, setEditName] = useState('');
+
+            const addRequest = () => {
+                if (!activeWorkspaceId) return;
+                const newReq = { id: generateId(), name: 'New Request', method: 'GET', url: '', body: '', headers: [], encryptConfig: { enabled: false, field: '', mode: 'CBC', padding: 'Pkcs7', key: '', iv: '' }, decryptConfig: { enabled: false, field: '', mode: 'CBC', padding: 'Pkcs7', key: '', iv: '' } };
+                const newWs = workspaces.map(w => w.id === activeWorkspaceId ? { ...w, requests: [...w.requests, newReq] } : w);
+                setWorkspaces(newWs);
+                setActiveRequestId(newReq.id);
+            };
+            const deleteRequest = (e, reqId) => {
+                e.stopPropagation();
+                if (!confirm("Delete this request?")) return;
+                const newWs = workspaces.map(w => w.id === activeWorkspaceId ? { ...w, requests: w.requests.filter(r => r.id !== reqId) } : w);
+                setWorkspaces(newWs);
+                if (activeRequestId === reqId) setActiveRequestId(null);
+            };
+            const createWorkspace = () => {
+                const name = prompt("Workspace Name:");
+                if(name) setWorkspaces([...workspaces, {id: generateId(), name, requests:[], env:{}}]);
+            };
+            
+            const startEdit = () => { if(activeWorkspace){ setIsEditing(true); setEditName(activeWorkspace.name); }};
+            const saveEdit = () => {
+                if(activeWorkspaceId && editName.trim()) {
+                    setWorkspaces(workspaces.map(w => w.id === activeWorkspaceId ? {...w, name: editName} : w));
+                }
+                setIsEditing(false);
+            };
+
+            return (
+                <div className="w-64 bg-monokai-sidebar border-r border-monokai-card flex flex-col">
+                    <div className="p-4 border-b border-monokai-card flex justify-between items-center">
+                        <span className="font-bold text-monokai-accent">Workspaces</span>
+                        <div className="flex space-x-1">
+                            <button onClick={() => setEnvModal(true)} title="Environments" className="hover:text-white text-monokai-dim"><Icon path={Icons.Globe} size={4}/></button>
+                            <label className="hover:text-white text-monokai-dim cursor-pointer" title="Import Postman/JSON">
+                                <Icon path={Icons.Upload} size={4}/>
+                                <input type="file" className="hidden" accept=".json" onChange={onImport} />
+                            </label>
+                            <button onClick={onExport} title="Export Workspace" className="hover:text-white text-monokai-dim"><Icon path={Icons.Download} size={4}/></button>
+                            <button onClick={createWorkspace} title="New Workspace" className="hover:text-white text-monokai-dim"><Icon path={Icons.Plus} size={4}/></button>
+                        </div>
+                    </div>
+                    <div className="p-2 flex gap-1">
+                        {isEditing ? (
+                            <div className="flex w-full gap-1">
+                                <input className="w-full bg-monokai-black text-xs p-1 rounded outline-none border border-monokai-blue" value={editName} onChange={e=>setEditName(e.target.value)} autoFocus onBlur={saveEdit} onKeyDown={e=>e.key==='Enter'&&saveEdit()}/>
+                            </div>
+                        ) : (
+                            <div className="flex w-full gap-1 items-center">
+                                <select value={activeWorkspaceId || ''} onChange={(e) => setActiveWorkspaceId(e.target.value)} className="flex-1 bg-monokai-card p-2 rounded text-xs outline-none">
+                                    {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                </select>
+                                <button onClick={startEdit} className="text-monokai-dim hover:text-white"><Icon path={Icons.Edit} size={3}/></button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex-1 overflow-auto p-2 space-y-1">
+                        {activeWorkspace?.requests.map(req => (
+                            <div key={req.id} onClick={() => setActiveRequestId(req.id)} className={`group flex items-center p-2 rounded cursor-pointer text-xs ${activeRequestId===req.id ? 'bg-monokai-card text-white' : 'text-monokai-dim hover:text-white'}`}>
+                                <span className={`w-8 font-bold ${req.method==='GET'?'text-monokai-blue':req.method==='POST'?'text-monokai-green':req.method==='DELETE'?'text-monokai-pink':'text-monokai-orange'}`}>{req.method.substr(0,3)}</span>
+                                <span className="truncate flex-1">{req.name}</span>
+                                <button onClick={(e) => deleteRequest(e, req.id)} className="hidden group-hover:block text-monokai-pink"><Icon path={Icons.Trash} size={3}/></button>
+                            </div>
+                        ))}
+                        <button onClick={addRequest} className="w-full text-center p-2 text-monokai-dim hover:text-monokai-green border border-dashed border-monokai-dim/30 rounded mt-2 text-xs">+ New Request</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const CurlImportModal = ({ onClose, onImport }) => {
+            const [text, setText] = useState('');
+            return (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                    <div className="bg-monokai-bg border border-monokai-card p-6 rounded-lg w-3/4 max-w-2xl shadow-xl flex flex-col gap-4">
+                        <h3 className="text-xl font-bold text-monokai-purple">Import cURL</h3>
+                        <textarea className="w-full h-40 bg-monokai-black p-3 rounded outline-none code-font border border-monokai-card focus:border-monokai-purple" placeholder="Paste curl command here..." value={text} onChange={e=>setText(e.target.value)}></textarea>
+                        <div className="flex justify-end gap-2">
+                            <button onClick={onClose} className="px-4 py-2 bg-monokai-card rounded hover:bg-monokai-dim">Cancel</button>
+                            <button onClick={()=>{onImport(text); onClose();}} className="px-4 py-2 bg-monokai-green text-black font-bold rounded hover:opacity-90">Import</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ApiRequestEditor = ({ activeRequest, updateRequest, executeRequest, loading, exportCurl }) => {
+            const [activeTab, setActiveTab] = useState('body');
+            const [showCurlModal, setShowCurlModal] = useState(false);
+            
+            // Body Tools
+            const prettifyBody = () => { try { updateRequest({...activeRequest, body: JSON.stringify(JSON.parse(activeRequest.body), null, 2)}); } catch(e){} };
+            const minifyBody = () => { try { updateRequest({...activeRequest, body: JSON.stringify(JSON.parse(activeRequest.body))}); } catch(e){} };
+            const sortBody = () => { 
+                try {
+                    const sort = (o) => { if(Array.isArray(o)) return o.map(sort); if(typeof o==='object'&&o!==null) return Object.keys(o).sort().reduce((a,k)=>{a[k]=sort(o[k]); return a;},{}); return o; };
+                    updateRequest({...activeRequest, body: JSON.stringify(sort(JSON.parse(activeRequest.body)), null, 2)});
+                } catch(e){}
+            };
+
+            const importCurl = (cmd) => {
+                if(!cmd) return;
+                let method = 'GET', url = '', body = '', headers = [];
+                
+                // Better URL regex: Looks for http:// or https://
+                const urlMatch = cmd.match(/(https?:\/\/[^\s'"]+)/);
+                if (urlMatch) url = urlMatch[1];
+                
+                const methodMatch = cmd.match(/-X\s+(\w+)/);
+                if(methodMatch) method = methodMatch[1];
+                
+                const headerMatches = cmd.matchAll(/-H\s+['"]([^'"]+)['"]/g);
+                for (const match of headerMatches) {
+                    const [k, v] = match[1].split(/:\s(.+)/);
+                    if(k && v) headers.push({ key: k, value: v, id: Math.random().toString() });
+                }
+                
+                // Capture data inside single quotes after -d or --data-raw
+                const dataMatch = cmd.match(/(-d|--data-raw)\s+'([^']+)'/);
+                if(dataMatch) { body = dataMatch[2]; if(method==='GET') method='POST'; }
+
+                updateRequest({...activeRequest, method, url, body, headers});
+            };
+
+            const generateKey = (configType, size) => {
+                const byteSize = size / 8;
+                const key = CryptoJS.lib.WordArray.random(byteSize).toString();
+                const currentConfig = activeRequest[configType] || {};
+                updateRequest({
+                    ...activeRequest, 
+                    [configType]: { ...currentConfig, key }
+                });
+            };
+
+            // Headers
+            const addHeader = () => updateRequest({...activeRequest, headers: [...(activeRequest.headers||[]), {id: Math.random().toString(), key:'', value:''}]});
+            const updateHeader = (id, field, val) => {
+                const newH = (activeRequest.headers||[]).map(h => h.id===id ? {...h, [field]:val} : h);
+                updateRequest({...activeRequest, headers: newH});
+            };
+            const removeHeader = (id) => updateRequest({...activeRequest, headers: activeRequest.headers.filter(h => h.id!==id)});
+
+            return (
+                <div className="flex-1 flex flex-col min-w-0 bg-monokai-bg">
+                    <div className="p-4 border-b border-monokai-card flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2">
+                        <select value={activeRequest.method || 'GET'} onChange={(e) => updateRequest({...activeRequest, method: e.target.value})} className="bg-monokai-card font-bold px-3 py-2 rounded outline-none text-monokai-blue">
+                            {['GET','POST','PUT','DELETE','PATCH'].map(m => <option key={m}>{m}</option>)}
+                        </select>
+                        <input type="text" value={activeRequest.url || ''} onChange={(e) => updateRequest({...activeRequest, url: e.target.value})} placeholder="https://api.example.com/..." className="flex-1 bg-monokai-black px-4 py-2 rounded outline-none code-font text-monokai-text border border-transparent focus:border-monokai-purple"/>
+                        <button onClick={executeRequest} disabled={loading} className="bg-monokai-green text-monokai-black font-bold px-6 py-2 rounded hover:opacity-90 transition flex items-center justify-center">
+                            {loading ? '...' : <><Icon path={Icons.Play} size={4} className="mr-2"/> Send</>}
+                        </button>
+                    </div>
+                    <div className="px-4 py-2 flex justify-between items-center bg-monokai-bg border-b border-monokai-card">
+                        <input type="text" value={activeRequest.name || ''} onChange={(e) => updateRequest({...activeRequest, name: e.target.value})} className="bg-transparent text-monokai-accent font-bold outline-none border-b border-transparent hover:border-monokai-dim focus:border-monokai-accent transition-colors" />
+                        <div className="flex space-x-2">
+                            <button onClick={()=>setShowCurlModal(true)} className="text-xs flex items-center bg-monokai-card hover:bg-monokai-purple text-white px-2 py-1 rounded">Import cURL</button>
+                            <button onClick={exportCurl} className="text-xs flex items-center text-monokai-dim hover:text-monokai-orange"><Icon path={Icons.Terminal} size={3} className="mr-1"/> cURL</button>
+                        </div>
+                    </div>
+                    <div className="flex border-b border-monokai-card text-xs">
+                        {['Body', 'Headers', 'Pre-Encrypt', 'Post-Decrypt'].map(t => (
+                            <button key={t} onClick={() => setActiveTab(t.toLowerCase())} className={`px-4 py-2 ${activeTab===t.toLowerCase() ? 'text-monokai-pink border-b-2 border-monokai-pink' : 'text-monokai-dim hover:text-white'}`}>{t}</button>
+                        ))}
+                    </div>
+                    <div className="flex-1 p-4 overflow-auto code-font relative">
+                        {activeTab === 'body' && (
+                            <div className="flex flex-col h-full">
+                                <div className="flex justify-end gap-2 mb-2">
+                                    <button onClick={prettifyBody} className="text-[10px] bg-monokai-card px-2 py-1 rounded hover:text-white">Prettify</button>
+                                    <button onClick={sortBody} className="text-[10px] bg-monokai-card px-2 py-1 rounded hover:text-white">Sort</button>
+                                    <button onClick={minifyBody} className="text-[10px] bg-monokai-card px-2 py-1 rounded hover:text-white">Minify</button>
+                                </div>
+                                <textarea value={activeRequest.body || ''} onChange={(e) => updateRequest({...activeRequest, body: e.target.value})} className="w-full flex-1 bg-monokai-black p-4 rounded resize-none outline-none border border-monokai-card" placeholder="{ 'json': 'body' }"></textarea>
+                            </div>
+                        )}
+                        {activeTab === 'headers' && (
+                            <div className="space-y-2">
+                                {(activeRequest.headers || []).map(h => (
+                                    <div key={h.id} className="flex gap-2">
+                                        <input placeholder="Key" value={h.key} onChange={e=>updateHeader(h.id, 'key', e.target.value)} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card outline-none text-xs"/>
+                                        <input placeholder="Value" value={h.value} onChange={e=>updateHeader(h.id, 'value', e.target.value)} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card outline-none text-xs"/>
+                                        <button onClick={()=>removeHeader(h.id)} className="text-monokai-pink hover:text-white"><Icon path={Icons.Trash} size={4}/></button>
+                                    </div>
+                                ))}
+                                <button onClick={addHeader} className="text-xs text-monokai-green mt-2">+ Add Header</button>
+                            </div>
+                        )}
+                        {(activeTab === 'pre-encrypt' || activeTab === 'post-decrypt') && (
+                            <div className="p-4 text-monokai-dim text-xs space-y-4 max-w-lg">
+                                {activeTab === 'pre-encrypt' ? (
+                                    <>
+                                        <div className="flex items-center gap-2 mb-4 border-b border-monokai-card pb-2">
+                                            <input type="checkbox" checked={activeRequest.encryptConfig?.enabled || false} onChange={(e) => updateRequest({...activeRequest, encryptConfig: {...activeRequest.encryptConfig, enabled: e.target.checked}})} />
+                                            <span className="font-bold text-white">Enable Pre-Request Encryption</span>
+                                        </div>
+                                        {activeRequest.encryptConfig?.enabled && (
+                                            <div className="space-y-3 pl-4 border-l border-monokai-card">
+                                                <div>
+                                                    <label className="block mb-1">Key (AES)</label>
+                                                    <div className="flex gap-2">
+                                                        <input type="text" value={activeRequest.encryptConfig?.key || ''} onChange={e=>updateRequest({...activeRequest, encryptConfig:{...activeRequest.encryptConfig, key:e.target.value}})} className="flex-1 bg-monokai-black p-2 rounded outline-none" placeholder="Hex or Passphrase"/>
+                                                        <select className="bg-monokai-card rounded text-[10px]" onChange={(e) => generateKey('encryptConfig', e.target.value)}>
+                                                            <option value="">Gen Key</option>
+                                                            <option value="128">128-bit</option>
+                                                            <option value="192">192-bit</option>
+                                                            <option value="256">256-bit</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div><label className="block mb-1">IV</label><input type="text" value={activeRequest.encryptConfig?.iv || ''} onChange={e=>updateRequest({...activeRequest, encryptConfig:{...activeRequest.encryptConfig, iv:e.target.value}})} className="w-full bg-monokai-black p-2 rounded outline-none"/></div>
+                                                <div className="flex gap-4">
+                                                    <div><label className="block mb-1">Mode</label><select value={activeRequest.encryptConfig?.mode||'CBC'} onChange={e=>updateRequest({...activeRequest, encryptConfig:{...activeRequest.encryptConfig, mode:e.target.value}})} className="bg-monokai-black p-2 rounded outline-none"><option>CBC</option><option>ECB</option></select></div>
+                                                    <div><label className="block mb-1">Padding</label><select value={activeRequest.encryptConfig?.padding||'Pkcs7'} onChange={e=>updateRequest({...activeRequest, encryptConfig:{...activeRequest.encryptConfig, padding:e.target.value}})} className="bg-monokai-black p-2 rounded outline-none"><option>Pkcs7</option><option>ZeroPadding</option></select></div>
+                                                </div>
+                                                <div><label className="block mb-1 text-monokai-accent">Target Keys (Comma separated)</label><input type="text" value={activeRequest.encryptConfig?.field || ''} onChange={(e) => updateRequest({...activeRequest, encryptConfig: {...activeRequest.encryptConfig, field: e.target.value}})} className="bg-monokai-black border border-monokai-dim/20 p-2 rounded w-full outline-none" placeholder="e.g. password, ssn (Empty = Encrypt Whole Body)" /></div>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="flex items-center gap-2 mb-4 border-b border-monokai-card pb-2">
+                                            <input type="checkbox" checked={activeRequest.decryptConfig?.enabled || false} onChange={(e) => updateRequest({...activeRequest, decryptConfig: {...activeRequest.decryptConfig, enabled: e.target.checked}})} />
+                                            <span className="font-bold text-white">Enable Post-Response Decryption</span>
+                                        </div>
+                                        {activeRequest.decryptConfig?.enabled && (
+                                            <div className="space-y-3 pl-4 border-l border-monokai-card">
+                                                <div>
+                                                    <label className="block mb-1">Key (AES)</label>
+                                                    <div className="flex gap-2">
+                                                        <input type="text" value={activeRequest.decryptConfig?.key || ''} onChange={e=>updateRequest({...activeRequest, decryptConfig:{...activeRequest.decryptConfig, key:e.target.value}})} className="flex-1 bg-monokai-black p-2 rounded outline-none" placeholder="Hex or Passphrase"/>
+                                                        <select className="bg-monokai-card rounded text-[10px]" onChange={(e) => generateKey('decryptConfig', e.target.value)}>
+                                                            <option value="">Gen Key</option>
+                                                            <option value="128">128-bit</option>
+                                                            <option value="192">192-bit</option>
+                                                            <option value="256">256-bit</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div><label className="block mb-1">IV</label><input type="text" value={activeRequest.decryptConfig?.iv || ''} onChange={e=>updateRequest({...activeRequest, decryptConfig:{...activeRequest.decryptConfig, iv:e.target.value}})} className="w-full bg-monokai-black p-2 rounded outline-none"/></div>
+                                                <div className="flex gap-4">
+                                                    <div><label className="block mb-1">Mode</label><select value={activeRequest.decryptConfig?.mode||'CBC'} onChange={e=>updateRequest({...activeRequest, decryptConfig:{...activeRequest.decryptConfig, mode:e.target.value}})} className="bg-monokai-black p-2 rounded outline-none"><option>CBC</option><option>ECB</option></select></div>
+                                                    <div><label className="block mb-1">Padding</label><select value={activeRequest.decryptConfig?.padding||'Pkcs7'} onChange={e=>updateRequest({...activeRequest, decryptConfig:{...activeRequest.decryptConfig, padding:e.target.value}})} className="bg-monokai-black p-2 rounded outline-none"><option>Pkcs7</option><option>ZeroPadding</option></select></div>
+                                                </div>
+                                                <div><label className="block mb-1 text-monokai-accent">Source Keys (Comma separated)</label><input type="text" value={activeRequest.decryptConfig?.field || ''} onChange={(e) => updateRequest({...activeRequest, decryptConfig: {...activeRequest.decryptConfig, field: e.target.value}})} className="bg-monokai-black border border-monokai-dim/20 p-2 rounded w-full outline-none" placeholder="e.g. data, encryptedPayload" /></div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const ApiResponsePanel = ({ response }) => {
+            const [view, setView] = useState('body'); // body, raw, req_plain, req_enc
+
+            return (
+                <div className="w-1/3 bg-monokai-sidebar border-l border-monokai-card flex flex-col min-w-[250px]">
+                    {response ? (
+                        <>
+                            <div className="p-2 border-b border-monokai-card flex justify-between items-center bg-monokai-bg">
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${response.status<300 ? 'bg-monokai-green text-monokai-black' : 'bg-monokai-pink text-white'}`}>
+                                    {response.status} {response.statusText}
+                                </span>
+                                <span className="text-xs text-monokai-dim">{response.time}ms</span>
+                            </div>
+                            <div className="flex border-b border-monokai-card text-[10px]">
+                                <button onClick={()=>setView('body')} className={`flex-1 py-1 ${view==='body'?'text-monokai-green border-b border-monokai-green':''}`}>Response (Decrypted)</button>
+                                <button onClick={()=>setView('raw')} className={`flex-1 py-1 ${view==='raw'?'text-monokai-blue border-b border-monokai-blue':''}`}>Raw Resp</button>
+                                <button onClick={()=>setView('req_plain')} className={`flex-1 py-1 ${view==='req_plain'?'text-monokai-orange border-b border-monokai-orange':''}`}>Request (Plain)</button>
+                                <button onClick={()=>setView('req_enc')} className={`flex-1 py-1 ${view==='req_enc'?'text-monokai-pink border-b border-monokai-pink':''}`}>Req (Enc)</button>
+                            </div>
+                            <div className="flex-1 overflow-auto p-2 relative">
+                                {view === 'body' && (
+                                    <>
+                                        <button onClick={() => copyToClipboard(response.body)} className="absolute top-2 right-2 text-monokai-dim hover:text-white bg-monokai-card/50 p-1 rounded z-10"><Icon path={Icons.Copy} size={4}/></button>
+                                        <pre className="text-xs code-font whitespace-pre-wrap break-all text-monokai-green">{safeJSON(response.body)}</pre>
+                                    </>
+                                )}
+                                {view === 'raw' && <pre className="text-xs code-font whitespace-pre-wrap break-all text-monokai-blue">{safeJSON(response.rawBody || response.body)}</pre>}
+                                {view === 'req_plain' && <pre className="text-xs code-font whitespace-pre-wrap break-all text-monokai-orange">{safeJSON(response.reqPlain)}</pre>}
+                                {view === 'req_enc' && <pre className="text-xs code-font whitespace-pre-wrap break-all text-monokai-pink">{safeJSON(response.reqEnc || 'No Encryption Used')}</pre>}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-monokai-dim opacity-50"><Icon path={Icons.Zap} size={8} className="mb-2"/><span>No Response Yet</span></div>
+                    )}
+                </div>
+            );
+        };
+
+        const ApiForge = ({ workspaces, setWorkspaces, activeWorkspaceId, setActiveWorkspaceId }) => {
+            const [activeRequestId, setActiveRequestId] = useState(null);
+            const [responses, setResponses] = useState({});
+            const [loading, setLoading] = useState(false);
+            const [envModal, setEnvModal] = useState(false);
+            const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
+            const activeRequest = activeWorkspace?.requests.find(r => r.id === activeRequestId);
+            
+            // Logic Hooks
+            const updateRequest = (req) => {
+                const newWs = workspaces.map(w => w.id === activeWorkspaceId ? { ...w, requests: w.requests.map(r => r.id === req.id ? req : r) } : w);
+                setWorkspaces(newWs);
+            };
+            const updateEnv = (key, value) => {
+                const newWs = workspaces.map(w => w.id === activeWorkspaceId ? { ...w, env: { ...(w.env || {}), [key]: value } } : w);
+                setWorkspaces(newWs);
+            };
+            const replaceVars = (str) => {
+                let res = str || '';
+                const env = activeWorkspace.env || {};
+                Object.keys(env).forEach(k => { res = res.replace(new RegExp(`{{${k}}}`, 'g'), env[k]); });
+                return res;
+            };
+
+            const executeRequest = async () => {
+                if(!activeRequest) return;
+                setLoading(true);
+                const startTime = Date.now();
+                const finalUrl = replaceVars(activeRequest.url);
+                try {
+                    const options = { method: activeRequest.method, headers: {} };
+                    (activeRequest.headers || []).forEach(h => { if(h.key) options.headers[h.key] = replaceVars(h.value); });
+                    
+                    let finalBody = replaceVars(activeRequest.body || '');
+                    let reqEncBody = null;
+
+                    // Encryption Logic
+                    if(activeRequest.encryptConfig?.enabled && finalBody) {
+                        try {
+                            const cfg = activeRequest.encryptConfig || {};
+                            const modeStr = cfg.mode || 'CBC';
+                            const padStr = cfg.padding || 'Pkcs7';
+                            const keyStr = cfg.key || '';
+                            const ivStr = cfg.iv || '';
+
+                            const mode = CryptoJS.mode[modeStr] || CryptoJS.mode.CBC;
+                            const padding = CryptoJS.pad[padStr] || CryptoJS.pad.Pkcs7;
+                            const key = CryptoJS.enc.Utf8.parse(keyStr);
+                            const opts = { mode: mode, padding: padding };
+                            if(ivStr) opts.iv = CryptoJS.enc.Utf8.parse(ivStr);
+                            
+                            const fields = cfg.field ? cfg.field.split(',').map(s=>s.trim()).filter(s=>s) : [];
+
+                            if (fields.length > 0) {
+                                // Partial Encryption
+                                try {
+                                    const jsonBody = JSON.parse(finalBody);
+                                    const encryptRecursive = (obj) => {
+                                        if(Array.isArray(obj)) obj.forEach(encryptRecursive);
+                                        else if(typeof obj === 'object' && obj !== null) {
+                                            Object.keys(obj).forEach(k => {
+                                                if(fields.includes(k)) {
+                                                    // Stringify object/array values before encrypting
+                                                    let plain = obj[k];
+                                                    if (typeof plain === 'object' && plain !== null) {
+                                                        plain = JSON.stringify(plain);
+                                                    } else {
+                                                        plain = String(plain);
+                                                    }
+                                                    obj[k] = CryptoJS.AES.encrypt(plain, key, opts).toString();
+                                                } else {
+                                                    encryptRecursive(obj[k]);
+                                                }
+                                            });
+                                        }
+                                    };
+                                    encryptRecursive(jsonBody);
+                                    finalBody = JSON.stringify(jsonBody);
+                                    reqEncBody = finalBody;
+                                } catch(e) { console.error("Partial Encrypt Error", e); }
+                            } else {
+                                // Full Body Encryption
+                                const encrypted = CryptoJS.AES.encrypt(finalBody, key, opts).toString();
+                                reqEncBody = encrypted; 
+                                finalBody = encrypted; 
+                            }
+                        } catch(e) { console.error("Encryption Failed", e); }
+                    }
+
+                    if (['POST', 'PUT', 'PATCH'].includes(activeRequest.method)) {
+                        options.body = finalBody;
+                        // Auto-detect JSON content type if not present
+                        if(!options.headers['Content-Type']) {
+                            try { JSON.parse(finalBody); options.headers['Content-Type'] = 'application/json'; } catch(e){}
+                        }
+                    }
+
+                    const res = await fetch(finalUrl, options);
+                    const blob = await res.blob();
+                    let rawText = await blob.text();
+                    let finalText = rawText;
+
+                    // Decryption Logic
+                    if(activeRequest.decryptConfig?.enabled) {
+                         try {
+                             const cfg = activeRequest.decryptConfig || {};
+                             const modeStr = cfg.mode || 'CBC';
+                             const padStr = cfg.padding || 'Pkcs7';
+                             const keyStr = cfg.key || '';
+                             const ivStr = cfg.iv || '';
+
+                             const mode = CryptoJS.mode[modeStr] || CryptoJS.mode.CBC;
+                             const padding = CryptoJS.pad[padStr] || CryptoJS.pad.Pkcs7;
+                             const key = CryptoJS.enc.Utf8.parse(keyStr);
+                             const opts = { mode: mode, padding: padding };
+                             if(ivStr) opts.iv = CryptoJS.enc.Utf8.parse(ivStr);
+                             
+                             const fields = cfg.field ? cfg.field.split(',').map(s=>s.trim()).filter(s=>s) : [];
+
+                             if (fields.length > 0) {
+                                 // Partial Decryption
+                                 try {
+                                     const jsonResp = JSON.parse(rawText);
+                                     const decryptRecursive = (obj) => {
+                                         if(Array.isArray(obj)) obj.forEach(decryptRecursive);
+                                         else if(typeof obj === 'object' && obj !== null) {
+                                             Object.keys(obj).forEach(k => {
+                                                 if(fields.includes(k)) {
+                                                     const decryptedBytes = CryptoJS.AES.decrypt(obj[k], key, opts);
+                                                     const decryptedStr = decryptedBytes.toString(CryptoJS.enc.Utf8);
+                                                     // Try to parse back to JSON if possible
+                                                     if (decryptedStr) {
+                                                         try {
+                                                             obj[k] = JSON.parse(decryptedStr);
+                                                         } catch(e) {
+                                                             obj[k] = decryptedStr;
+                                                         }
+                                                     }
+                                                 } else {
+                                                     decryptRecursive(obj[k]);
+                                                 }
+                                             });
+                                         }
+                                     };
+                                     decryptRecursive(jsonResp);
+                                     finalText = JSON.stringify(jsonResp);
+                                 } catch(e) { console.error("Partial Decrypt Error", e); }
+                             } else {
+                                 // Full Body Decryption
+                                 const decrypted = CryptoJS.AES.decrypt(rawText, key, opts).toString(CryptoJS.enc.Utf8);
+                                 if(decrypted) finalText = decrypted;
+                             }
+                         } catch(e) { console.error("Decryption Failed", e); finalText = "[Decryption Failed]: " + rawText; }
+                    }
+
+                    setResponses({ ...responses, [activeRequest.id]: { 
+                        status: res.status, 
+                        statusText: res.statusText, 
+                        time: Date.now() - startTime, 
+                        body: finalText,
+                        rawBody: rawText,
+                        reqPlain: activeRequest.body,
+                        reqEnc: reqEncBody
+                    }});
+                } catch (err) {
+                    setResponses({ ...responses, [activeRequest.id]: { status: 0, statusText: 'Error', time: Date.now() - startTime, size: 0, body: `Error: ${err.message}\n(CORS blocked?)` }});
+                } finally { setLoading(false); }
+            };
+
+            const exportCurl = () => {
+                if(!activeRequest) return;
+                let cmd = `curl -X ${activeRequest.method} "${replaceVars(activeRequest.url)}"`;
+                (activeRequest.headers || []).forEach(h => { if(h.key) cmd += ` -H "${h.key}: ${replaceVars(h.value)}"`; });
+                if(['POST', 'PUT'].includes(activeRequest.method) && activeRequest.body) {
+                    cmd += ` -d '${replaceVars(activeRequest.body).replace(/'/g, "'\\''")}'`;
+                }
+                copyToClipboard(cmd);
+                alert("Copied to clipboard!");
+            };
+
+            const handleImport = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const json = JSON.parse(ev.target.result);
+                        // Postman Import Logic
+                        if(json.info && json.item) {
+                            const newWs = {
+                                id: generateId(),
+                                name: json.info.name,
+                                requests: json.item.map(i => ({
+                                    id: generateId(),
+                                    name: i.name,
+                                    method: i.request.method,
+                                    url: i.request.url?.raw || i.request.url,
+                                    body: i.request.body?.raw || '',
+                                    headers: (i.request.header || []).map(h => ({id: generateId(), key: h.key, value: h.value})),
+                                    encryptConfig: {}, decryptConfig: {}
+                                })),
+                                env: {}
+                            };
+                            setWorkspaces([...workspaces, newWs]);
+                            setActiveWorkspaceId(newWs.id);
+                        } else {
+                            // Internal Import
+                            setWorkspaces(json.workspaces || workspaces);
+                        }
+                    } catch(err) { alert("Invalid File"); }
+                };
+                reader.readAsText(file);
+            };
+
+            const handleExport = () => {
+                if(!activeWorkspace) return;
+                // Postman v2.1 Format
+                const exportData = {
+                    info: { name: activeWorkspace.name, schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+                    item: activeWorkspace.requests.map(r => ({
+                        name: r.name,
+                        request: {
+                            method: r.method,
+                            header: (r.headers||[]).map(h => ({key: h.key, value: h.value, type: 'text'})),
+                            url: { raw: r.url, host: r.url.split('://')[1]?.split('/')[0]?.split('.'), path: r.url.split('://')[1]?.split('/').slice(1) },
+                            body: { mode: 'raw', raw: r.body }
+                        }
+                    }))
+                };
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${activeWorkspace.name}.postman_collection.json`;
+                a.click();
+            };
+
+            return (
+                <div className="flex h-full">
+                    <ApiSidebar 
+                        workspaces={workspaces} 
+                        activeWorkspace={activeWorkspace} 
+                        activeWorkspaceId={activeWorkspaceId} 
+                        setActiveWorkspaceId={setActiveWorkspaceId} 
+                        activeRequestId={activeRequestId} 
+                        setActiveRequestId={setActiveRequestId} 
+                        setWorkspaces={setWorkspaces} 
+                        generateId={generateId} 
+                        setEnvModal={setEnvModal}
+                        onImport={handleImport}
+                        onExport={handleExport}
+                    />
+                    {activeRequest ? 
+                        <ApiRequestEditor 
+                            activeRequest={activeRequest} 
+                            updateRequest={updateRequest} 
+                            executeRequest={executeRequest} 
+                            loading={loading} 
+                            exportCurl={exportCurl} 
+                        /> 
+                    : <div className="flex-1 flex items-center justify-center text-monokai-dim">Select a Request</div>}
+                    <ApiResponsePanel response={activeRequestId && responses[activeRequestId]} />
+                    {envModal && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                            <div className="bg-monokai-bg border border-monokai-card p-6 rounded-lg w-96 shadow-xl">
+                                <h2 className="text-xl font-bold text-monokai-accent mb-4">Environment Variables</h2>
+                                <div className="space-y-2 mb-4 max-h-60 overflow-auto">
+                                    {Object.keys(activeWorkspace?.env || {}).map(k => (
+                                        <div key={k} className="flex gap-2"><input readOnly value={k} className="w-1/3 bg-monokai-card p-1 rounded text-xs text-monokai-dim"/><input value={activeWorkspace.env[k] || ''} onChange={(e) => updateEnv(k, e.target.value)} className="flex-1 bg-monokai-black p-1 rounded text-xs outline-none"/><button onClick={() => { const newEnv = {...activeWorkspace.env}; delete newEnv[k]; const newWs = workspaces.map(w => w.id === activeWorkspaceId ? { ...w, env: newEnv } : w); setWorkspaces(newWs); }} className="text-monokai-pink">x</button></div>
+                                    ))}
+                                    <div className="flex gap-2 border-t border-monokai-card pt-2"><input id="newEnvKey" placeholder="KEY" className="w-1/3 bg-monokai-card p-1 rounded text-xs outline-none"/><input id="newEnvVal" placeholder="VALUE" className="flex-1 bg-monokai-black p-1 rounded text-xs outline-none"/><button onClick={() => { const k = document.getElementById('newEnvKey').value; const v = document.getElementById('newEnvVal').value; if(k) { updateEnv(k,v); document.getElementById('newEnvKey').value=''; document.getElementById('newEnvVal').value=''; } }} className="text-monokai-green"><Icon path={Icons.Plus} size={4}/></button></div>
+                                </div>
+                                <div className="text-right"><button onClick={() => setEnvModal(false)} className="px-4 py-2 bg-monokai-card rounded hover:bg-monokai-dim text-xs">Close</button></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ==========================================
+        // MODULE: CRYPTO LAB
+        // ==========================================
+        const CryptoKnowledgeBase = ({ mode }) => {
+            const kbData = {
+                aes: {
+                    title: "AES (Advanced Encryption Standard)",
+                    what: "A symmetric block cipher chosen by the U.S. government to protect classified information.",
+                    why: "Replaced DES. Fast, secure, and supports large key sizes (128, 192, 256 bits).",
+                    how: "Operates on 128-bit blocks. Uses substitution, permutation, and mixing layers. CBC mode chains blocks using an IV.",
+                    when: "Whenever you need high-performance, secure encryption for data at rest or in transit (e.g., Database fields, File encryption).",
+                    keyPointers: [
+                        "Always use a strong, random Key.",
+                        "Never reuse an IV with the same key.",
+                        "GCM mode (Authenticated Encryption) is preferred over CBC for integrity.",
+                        "ECB mode is insecure because identical plaintext blocks produce identical ciphertext blocks."
+                    ]
+                },
+                des: {
+                    title: "TripleDES (3DES)",
+                    what: "Applies the Data Encryption Standard (DES) cipher three times to each data block.",
+                    why: "Created to extend the life of DES by increasing key size.",
+                    how: "Encrypts with Key1, Decrypts with Key2, Encrypts with Key3 (EDE).",
+                    when: "Legacy systems (banking/payments) where hardware requires it. Avoid for new systems.",
+                    keyPointers: [
+                        "Vulnerable to collision attacks (Sweet32) due to small 64-bit block size.",
+                        "Significantly slower than AES.",
+                        "Deprecated by NIST."
+                    ]
+                },
+                rabbit: {
+                    title: "Rabbit",
+                    what: "A high-speed stream cipher.",
+                    why: "Designed for high performance in software.",
+                    how: "Generates a keystream that is XORed with the plaintext.",
+                    when: "High-performance streaming media (video/audio) where block ciphers might introduce latency.",
+                    keyPointers: [
+                        "128-bit key and 64-bit IV.",
+                        "Very fast (3.7 cycles per byte).",
+                        "RFC 4503 standard."
+                    ]
+                },
+                rc4: {
+                    title: "RC4",
+                    what: "A stream cipher known for its simplicity and speed.",
+                    why: "Was widely used in SSL/TLS and WEP.",
+                    how: "Uses a variable length key (1-256 bytes) to initialize a state vector.",
+                    when: "Do NOT use for new systems. Only useful for decrypting/analyzing legacy traffic.",
+                    keyPointers: [
+                        "Cryptographically broken (biases in keystream output).",
+                        "Attacks exist that can recover the key.",
+                        "Removed from modern TLS."
+                    ]
+                },
+                rsa: {
+                    title: "RSA (Rivest–Shamir–Adleman)",
+                    what: "Asymmetric cryptography algorithm using a Public/Private key pair.",
+                    why: "Allows secure key exchange over insecure channels.",
+                    how: "Security relies on the difficulty of factoring the product of two large prime numbers.",
+                    when: "Key Exchange (sending an AES key securely), Digital Signatures, SSL/TLS certificates.",
+                    keyPointers: [
+                        "Key size matters: 2048-bit is the minimum for modern security.",
+                        "Slow: Not suitable for encrypting large data chunks (use hybrid encryption: RSA encrypts AES key, AES encrypts data).",
+                        "Padding (OAEP) is crucial to prevent attacks.",
+                        "Note: PKCS#1 v1.5 padding includes random data, so encryption output changes every time. This is correct security behavior."
+                    ]
+                },
+                hash: {
+                    title: "Hashing",
+                    what: "One-way mathematical function that maps data of arbitrary size to a bit string of fixed size.",
+                    why: "To verify data integrity and store passwords securely.",
+                    how: "Deterministic: Same input always equals same output. Avalanche effect: Small change in input -> huge change in output.",
+                    when: "Password storage (salted), File integrity checks (checksums), Digital Signatures.",
+                    keyPointers: [
+                        "MD5/SHA1 are broken (collisions found).",
+                        "SHA-256 / SHA-3 are current standards.",
+                        "Hashes cannot be decrypted."
+                    ]
+                }
+            };
+
+            const data = kbData[mode] || kbData['aes'];
+
+            return (
+                <div className="space-y-4 text-xs text-monokai-dim text-left">
+                    <h3 className="text-monokai-accent font-bold text-sm mb-2 border-b border-monokai-card pb-2">{data.title}</h3>
+                    
+                    <div><strong className="text-white">What:</strong> <p>{data.what}</p></div>
+                    <div><strong className="text-white">Why:</strong> <p>{data.why}</p></div>
+                    <div><strong className="text-white">How:</strong> <p>{data.how}</p></div>
+                    <div><strong className="text-white">When:</strong> <p>{data.when}</p></div>
+                    
+                    <div>
+                        <strong className="text-white">Key Pointers:</strong>
+                        <ul className="list-disc pl-4 mt-1 space-y-1">
+                            {data.keyPointers.map((p, i) => <li key={i}>{p}</li>)}
+                        </ul>
+                    </div>
+                </div>
+            );
+        };
+
+        const CryptoLab = () => {
+            const [mode, setMode] = useState('aes');
+            const [action, setAction] = useState('encrypt');
+            const [input, setInput] = useState('');
+            const [key, setKey] = useState('');
+            const [iv, setIv] = useState('');
+            const [output, setOutput] = useState('');
+            const [aesMode, setAesMode] = useState('CBC');
+            const [aesPadding, setAesPadding] = useState('Pkcs7');
+            const [keyFormat, setKeyFormat] = useState('utf8'); // utf8 or hex
+            const [rsaKeySize, setRsaKeySize] = useState('1024');
+            const [rsaPriv, setRsaPriv] = useState('');
+            const [rsaPub, setRsaPub] = useState('');
+            const [hashAlgo, setHashAlgo] = useState('SHA256');
+            const isMounted = useRef(true);
+
+            useEffect(() => {
+                isMounted.current = true;
+                return () => { isMounted.current = false; };
+            }, []);
+
+            // Clear state on mode change to prevent "leaks" (phantom state)
+            useEffect(() => {
+                setInput('');
+                setKey('');
+                setIv('');
+                setOutput('');
+                setRsaPriv('');
+                setRsaPub('');
+            }, [mode]);
+
+            // --- EXAMPLES MAP ---
+            const examples = {
+                aes: { key: "1234567890123456", iv: "1234567890123456", input: "Hello World" },
+                des: { key: "123456789012345678901234", iv: "12345678", input: "TripleDES Test" },
+                rabbit: { key: "SecretPassphrase", iv: "", input: "Stream Cipher Run" }, 
+                rc4: { key: "Secret", iv: "", input: "RC4 Legacy Test" },
+                rsa: { key: "", iv: "", input: "RSA Message" },
+                hash: { key: "", iv: "", input: "Check Integrity" }
+            };
+
+            const loadExample = () => {
+                const ex = examples[mode];
+                if(ex) {
+                    setKey(ex.key);
+                    setIv(ex.iv);
+                    setInput(ex.input);
+                    if(mode === 'rsa') genRsa();
+                }
+            };
+
+            const parseInput = (val, format) => {
+                if(!val) return null;
+                try {
+                    return format === 'hex' ? CryptoJS.enc.Hex.parse(val) : CryptoJS.enc.Utf8.parse(val);
+                } catch(e) { return null; }
+            };
+
+            const process = () => {
+                try {
+                    let res = '';
+                    // Common Options
+                    const opts = { 
+                        mode: CryptoJS.mode[aesMode], 
+                        padding: CryptoJS.pad[aesPadding] 
+                    };
+                    if (iv) {
+                        const parsedIv = parseInput(iv, keyFormat);
+                        if(parsedIv) opts.iv = parsedIv;
+                    }
+
+                    // Key parsing:
+                    // If keyFormat is hex, parse it.
+                    // If utf8, we usually rely on CryptoJS default. 
+                    // BUT: Passing a string to encrypt() triggers PBKDF2 (random salt).
+                    // To force deterministic encryption with a string key, we MUST parse it to a WordArray.
+                    let parsedKey = parseInput(key, keyFormat);
+                    
+                    // Fallback: if empty/null, use raw key string (will fail later if empty)
+                    // If parseInput returns something, use it.
+                    // IMPORTANT: For Rabbit/RC4, we MUST use parsedKey to avoid random salt if we want deterministic behavior.
+                    
+                    if(mode === 'aes') {
+                        if(!key) throw new Error("Key Required");
+                        if(action === 'encrypt') {
+                            res = CryptoJS.AES.encrypt(input, parsedKey, opts).toString();
+                        } else {
+                            res = CryptoJS.AES.decrypt(input, parsedKey, opts).toString(CryptoJS.enc.Utf8);
+                        }
+                    }
+                    else if(mode === 'des') {
+                        // TripleDES in CryptoJS
+                        if(action === 'encrypt') res = CryptoJS.TripleDES.encrypt(input, parsedKey, opts).toString();
+                        else res = CryptoJS.TripleDES.decrypt(input, parsedKey, opts).toString(CryptoJS.enc.Utf8);
+                    }
+                    else if(mode === 'rabbit') {
+                        // Rabbit: if we pass a string, it uses PBE (salt). If we pass WordArray, it uses raw key.
+                        // We use parsedKey to ensure determinism.
+                        if(action === 'encrypt') res = CryptoJS.Rabbit.encrypt(input, parsedKey, opts).toString();
+                        else res = CryptoJS.Rabbit.decrypt(input, parsedKey, opts).toString(CryptoJS.enc.Utf8);
+                    }
+                    else if(mode === 'rc4') {
+                        // RC4: Same logic.
+                        if(action === 'encrypt') res = CryptoJS.RC4.encrypt(input, parsedKey, opts).toString();
+                        else res = CryptoJS.RC4.decrypt(input, parsedKey, opts).toString(CryptoJS.enc.Utf8);
+                    }
+                    else if(mode === 'rsa') {
+                        const crypt = new JSEncrypt();
+                        if(action === 'encrypt') {
+                            if(!rsaPub) throw new Error("Public Key Required");
+                            crypt.setPublicKey(rsaPub);
+                            res = crypt.encrypt(input);
+                        } else {
+                            if(!rsaPriv) throw new Error("Private Key Required");
+                            crypt.setPrivateKey(rsaPriv);
+                            res = crypt.decrypt(input);
+                        }
+                        if(!res) res = "RSA Operation Failed (Check Key/Input Size)";
+                    }
+                    else if(mode === 'hash') {
+                        if(hashAlgo === 'MD5') res = CryptoJS.MD5(input).toString();
+                        if(hashAlgo === 'SHA1') res = CryptoJS.SHA1(input).toString();
+                        if(hashAlgo === 'SHA256') res = CryptoJS.SHA256(input).toString();
+                        if(hashAlgo === 'Base64Enc') res = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(input));
+                        if(hashAlgo === 'Base64Dec') res = CryptoJS.enc.Base64.parse(input).toString(CryptoJS.enc.Utf8);
+                    }
+                    setOutput(res || "Empty Result / Error");
+                } catch(e) { setOutput("Error: " + e.message); }
+            };
+
+            const genRsa = () => {
+                setOutput("Generating RSA Keys (might take a moment)...");
+                setTimeout(() => {
+                    if (!isMounted.current) return;
+                    const c = new JSEncrypt({ default_key_size: parseInt(rsaKeySize) });
+                    c.getKey(() => { 
+                        if (isMounted.current) {
+                            setRsaPriv(c.getPrivateKey()); 
+                            setRsaPub(c.getPublicKey()); 
+                            setOutput("Keys Generated."); 
+                        }
+                    });
+                }, 100);
+            };
+
+            return (
+                <div className="flex h-full">
+                    <div className="w-20 bg-monokai-sidebar border-r border-monokai-card pt-4 flex flex-col items-center gap-4">
+                        {['aes','des','rabbit','rc4','rsa','hash'].map(m => (
+                            <button key={m} onClick={()=>setMode(m)} className={`text-[10px] uppercase font-bold p-2 w-16 rounded transition-colors ${mode===m?'bg-monokai-purple text-black':'text-monokai-dim hover:text-white'}`}>{m}</button>
+                        ))}
+                    </div>
+                    <div className="flex-1 p-6 overflow-auto">
+                        <div className="max-w-3xl mx-auto space-y-4">
+                            <div className="flex justify-between items-end border-b border-monokai-card pb-2">
+                                <h2 className="text-xl font-bold text-monokai-purple uppercase">{mode}</h2>
+                                <button onClick={loadExample} className="text-xs bg-monokai-card hover:bg-monokai-accent hover:text-black px-3 py-1 rounded">Load Test Example</button>
+                            </div>
+                            
+                            {/* Actions Row */}
+                            {mode !== 'hash' && (
+                                <div className="flex gap-4">
+                                    <div className="flex bg-monokai-sidebar p-1 rounded border border-monokai-card">
+                                        <button onClick={()=>setAction('encrypt')} className={`px-4 py-1 rounded text-xs transition-colors ${action==='encrypt'?'bg-monokai-green text-black':'text-monokai-dim'}`}>Encrypt</button>
+                                        <button onClick={()=>setAction('decrypt')} className={`px-4 py-1 rounded text-xs transition-colors ${action==='decrypt'?'bg-monokai-green text-black':'text-monokai-dim'}`}>Decrypt</button>
+                                    </div>
+                                    {mode === 'rsa' && (
+                                        <div className="flex items-center gap-2">
+                                            <select value={rsaKeySize} onChange={e=>setRsaKeySize(e.target.value)} className="bg-monokai-card text-xs p-1 rounded outline-none"><option value="512">512 bit</option><option value="1024">1024 bit</option><option value="2048">2048 bit</option></select>
+                                            <button onClick={genRsa} className="text-xs bg-monokai-orange text-black px-3 py-1 rounded">Gen Keys</button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Configs for AES/DES */}
+                            {(mode === 'aes' || mode === 'des') && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-monokai-sidebar p-3 rounded border border-monokai-card">
+                                    <div>
+                                        <label className="block text-[10px] text-monokai-dim mb-1">Mode</label>
+                                        <select value={aesMode} onChange={e=>setAesMode(e.target.value)} className="w-full bg-monokai-card text-xs p-1 rounded outline-none">
+                                            {['CBC','ECB','CFB','CTR','OFB'].map(m=><option key={m}>{m}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-monokai-dim mb-1">Padding</label>
+                                        <select value={aesPadding} onChange={e=>setAesPadding(e.target.value)} className="w-full bg-monokai-card text-xs p-1 rounded outline-none">
+                                            {['Pkcs7','ZeroPadding','Iso10126','NoPadding','AnsiX923'].map(p=><option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-monokai-dim mb-1">Input Format</label>
+                                        <select value={keyFormat} onChange={e=>setKeyFormat(e.target.value)} className="w-full bg-monokai-card text-xs p-1 rounded outline-none">
+                                            <option value="utf8">Text (UTF-8)</option>
+                                            <option value="hex">Hex</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Keys Inputs */}
+                            {mode === 'rsa' ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <textarea value={rsaPub} onChange={e=>setRsaPub(e.target.value)} placeholder="Public Key" className="h-24 bg-monokai-black p-2 rounded border border-monokai-card text-[10px] code-font resize-none"></textarea>
+                                    <textarea value={rsaPriv} onChange={e=>setRsaPriv(e.target.value)} placeholder="Private Key" className="h-24 bg-monokai-black p-2 rounded border border-monokai-card text-[10px] code-font resize-none"></textarea>
+                                </div>
+                            ) : mode !== 'hash' ? (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs text-monokai-dim mb-1">Secret Key</label>
+                                        <input value={key} onChange={e=>setKey(e.target.value)} placeholder={mode==='aes'?"16/24/32 chars":"8/24 chars"} className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-xs code-font outline-none focus:border-monokai-purple"/>
+                                    </div>
+                                    {(mode === 'aes' || mode === 'des') && aesMode !== 'ECB' && (
+                                        <div>
+                                            <label className="block text-xs text-monokai-dim mb-1">IV (Init Vector)</label>
+                                            <input value={iv} onChange={e=>setIv(e.target.value)} placeholder={mode==='aes'?"16 chars":"8 chars"} className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-xs code-font outline-none focus:border-monokai-purple"/>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs text-monokai-dim mb-1">Hashing Algorithm</label>
+                                    <select value={hashAlgo} onChange={e=>setHashAlgo(e.target.value)} className="w-full bg-monokai-card p-2 rounded outline-none"><option>SHA256</option><option>MD5</option><option>SHA1</option><option>Base64Enc</option><option>Base64Dec</option></select>
+                                </div>
+                            )}
+
+                            <div>
+                                <div className="flex justify-between mb-1">
+                                    <label className="text-xs text-monokai-dim">Input Data</label>
+                                    <button onClick={()=>copyToClipboard(input)} className="text-xs hover:text-white"><Icon path={Icons.Copy} size={3}/></button>
+                                </div>
+                                <textarea value={input} onChange={e=>setInput(e.target.value)} className="w-full h-24 bg-monokai-black p-3 rounded border border-monokai-card code-font resize-none outline-none focus:border-monokai-accent" placeholder="Input Text..."></textarea>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <button onClick={process} className="bg-monokai-purple text-black font-bold px-6 py-2 rounded hover:opacity-90 shadow-lg shadow-monokai-purple/20">Process</button>
+                                <button onClick={()=>{setInput('');setOutput('');setKey('');setIv('')}} className="bg-monokai-card px-4 py-2 rounded hover:bg-white/10">Clear</button>
+                            </div>
+
+                            <div className="relative group">
+                                <label className="text-xs text-monokai-dim mb-1 block">Output Result</label>
+                                <textarea readOnly value={output} className="w-full h-24 bg-monokai-black p-3 rounded border border-monokai-card code-font text-monokai-green resize-none outline-none"></textarea>
+                                <button onClick={()=>copyToClipboard(output)} className="absolute top-8 right-2 text-monokai-dim hover:text-white bg-monokai-card p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Icon path={Icons.Copy} size={4}/></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="w-72 bg-monokai-sidebar border-l border-monokai-card p-4 hidden md:block overflow-auto"><CryptoKnowledgeBase mode={mode} /></div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // MODULE: JSON STUDIO
+        // ==========================================
+
+        const JsonFormatTool = () => {
+            const [input, setInput] = useState('');
+            const [softWrap, setSoftWrap] = useState(false);
+            const [fullScreen, setFullScreen] = useState(false);
+            const [html, setHtml] = useState(null);
+
+            const highlight = (jsonStr) => {
+                try {
+                    const obj = JSON.parse(jsonStr);
+                    const fmt = JSON.stringify(obj, null, 2);
+                    setHtml(fmt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+                            let cls = 'json-number';
+                            if (/^"/.test(match)) { cls = /:$/.test(match) ? 'json-key' : 'json-string'; }
+                            else if (/true|false/.test(match)) cls = 'json-boolean';
+                            else if (/null/.test(match)) cls = 'json-null';
+                            return `<span class="${cls}">${match}</span>`;
+                        }));
+                } catch(e) { setHtml(`<span class="text-monokai-pink">Invalid JSON</span>`); }
+            };
+
+            const prettify = (sort) => {
+                try {
+                    let obj = JSON.parse(input);
+                    const sortObj = (o) => {
+                        if (Array.isArray(o)) return o.map(sortObj);
+                        if (typeof o === 'object' && o !== null) return Object.keys(o).sort().reduce((a, k) => { a[k] = sortObj(o[k]); return a; }, {});
+                        return o;
+                    };
+                    if(sort) obj = sortObj(obj);
+                    const res = JSON.stringify(obj, null, 2);
+                    setInput(res);
+                    highlight(res);
+                } catch(e) { alert("Invalid JSON"); }
+            };
+
+            const minify = () => {
+                try { setInput(JSON.stringify(JSON.parse(input))); highlight(JSON.stringify(JSON.parse(input))); } catch(e){ alert("Invalid JSON"); }
+            };
+
+            useEffect(() => { if(!input) setHtml(''); else highlight(input); }, [input]);
+
+            return (
+                <div className="flex h-full p-4 gap-4">
+                    <div className={`${fullScreen ? 'hidden' : 'w-1/2'} flex flex-col`}>
+                        <div className="mb-2 flex justify-between">
+                            <span className="text-monokai-accent font-bold">Input</span>
+                            <div className="space-x-2">
+                                <button onClick={() => setInput('')} className="text-xs">Clear</button>
+                                <button onClick={() => prettify(false)} className="bg-monokai-card px-2 rounded text-xs">Prettify</button>
+                                <button onClick={() => prettify(true)} className="bg-monokai-card px-2 rounded text-xs">Sort</button>
+                                <button onClick={minify} className="bg-monokai-card px-2 rounded text-xs text-monokai-orange">Minify</button>
+                            </div>
+                        </div>
+                        <textarea value={input} onChange={e => setInput(e.target.value)} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card code-font resize-none outline-none" placeholder="Paste JSON..."></textarea>
+                    </div>
+                    <div className={`${fullScreen ? 'fixed inset-0 z-50 bg-monokai-bg p-4' : 'w-1/2'} flex flex-col border-l border-monokai-card pl-4`}>
+                        <div className="mb-2 flex justify-between">
+                            <span className="text-monokai-green font-bold">Formatted</span>
+                            <div>
+                                <button onClick={()=>setSoftWrap(!softWrap)} className={`mr-2 ${softWrap ? 'text-monokai-accent' : 'text-monokai-dim'}`} title="Soft Wrap"><Icon path={Icons.Wrap} size={4}/></button>
+                                <button onClick={()=>setFullScreen(!fullScreen)} className="text-monokai-dim" title="Full Screen"><Icon path={fullScreen ? Icons.Minimize : Icons.Maximize} size={4}/></button>
+                            </div>
+                        </div>
+                        <div className={`flex-1 bg-monokai-sidebar p-2 rounded overflow-auto border border-monokai-card ${softWrap ? 'soft-wrap' : 'no-wrap'}`}>
+                            <pre className="code-font text-xs" dangerouslySetInnerHTML={{__html: html || ''}}></pre>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const JsonGeneratorTool = () => {
+            const [input, setInput] = useState('');
+            const [lang, setLang] = useState('java');
+            const [output, setOutput] = useState('');
+
+            const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+            const genJava = (obj, className, isStatic=false) => {
+                let fields = '', nested = '', setters = '';
+                Object.entries(obj).forEach(([k, v]) => {
+                    let type = 'Object';
+                    const cap = capitalize(k);
+                    if(v !== null) {
+                        if(typeof v === 'string') type = 'String';
+                        else if(typeof v === 'boolean') type = 'boolean';
+                        else if(typeof v === 'number') type = Number.isInteger(v) ? 'int' : 'double';
+                        else if(Array.isArray(v)) { 
+                            type = 'List<Object>';
+                            if (v.length > 0) {
+                                if (typeof v[0] === 'object') {
+                                    const sub = cap + "Item";
+                                    type = `List<${sub}>`;
+                                    const res = genJava(v[0], sub, true);
+                                    nested += res.cls;
+                                    setters += `        // List ${k} setup skipped for brevity in main\n`;
+                                } else {
+                                    const t = typeof v[0];
+                                    type = `List<${t === 'string' ? 'String' : t === 'number' ? (Number.isInteger(v[0])?'Integer':'Double') : 'Object'}>`;
+                                }
+                            }
+                        } 
+                        else if(typeof v === 'object') {
+                            type = cap;
+                            const res = genJava(v, cap, true);
+                            nested += res.cls;
+                            setters += `        ${className.toLowerCase()}.set${cap}(new ${cap}());\n${res.setters.replace(/obj/g, className.toLowerCase()+'.get'+cap+'()')}`;
+                        }
+                    }
+                    fields += `    private ${type} ${k};\n`;
+                    if(typeof v !== 'object' && !Array.isArray(v) && v !== null) {
+                        const val = typeof v === 'string' ? `"${v}"` : v;
+                        setters += `        obj.set${cap}(${val});\n`;
+                    }
+                });
+                return { cls: `public ${isStatic?'static ':''}class ${className} {\n${fields}\n    // Getters/Setters...\n${nested}}\n`, setters };
+            };
+
+            const genKotlin = (obj, className) => {
+                let props = '', nested = '', args = '';
+                
+                // Helper to format values for Kotlin code
+                const formatValue = (val) => {
+                    if (val === null) return 'null';
+                    if (typeof val === 'string') return `"${val}"`;
+                    if (typeof val === 'number') return val;
+                    if (typeof val === 'boolean') return val;
+                    if (Array.isArray(val)) {
+                        // Recursively format list
+                        return `listOf(${val.map(item => {
+                            if (typeof item === 'object' && item !== null) {
+                                // We don't have class names here easily without passing down context or assuming simple mapping
+                                // For simplicity in main generator, we assume standard naming if we could, 
+                                // but standard recursion is cleaner if we separate data generation.
+                                // However, for this tool, let's try to map back to "Item" or similar if known.
+                                // Actually, let's just output comments for complex lists in main to avoid huge code.
+                                return "/* ... */";
+                            }
+                            return formatValue(item);
+                        }).join(', ')})`;
+                    }
+                    return 'null';
+                };
+
+                Object.entries(obj).forEach(([k, v]) => {
+                    let type = 'Any?';
+                    let valStr = 'null';
+
+                    if(v !== null) {
+                        if(typeof v === 'string') { type = 'String'; valStr = `"${v}"`; }
+                        else if(typeof v === 'number') { type = Number.isInteger(v) ? 'Int' : 'Double'; valStr = v; }
+                        else if(typeof v === 'boolean') { type = 'Boolean'; valStr = v; }
+                        else if(Array.isArray(v)) {
+                            type = 'List<Any>';
+                            if (v.length > 0 && typeof v[0] === 'object') {
+                                const sub = capitalize(k); // Using singular logic or just cap
+                                type = `List<${sub}>`;
+                                const res = genKotlin(v[0], sub);
+                                nested += res.cls + "\n";
+                                // Generate list of objects
+                                const listItems = v.map(item => {
+                                    const itemRes = genKotlin(item, sub);
+                                    return `${sub}(\n            ${itemRes.args.replace(/\n/g, '\n            ')}        )`;
+                                }).join(',\n        ');
+                                valStr = `listOf(\n        ${listItems}\n    )`;
+                            } else {
+                                valStr = formatValue(v);
+                            }
+                        }
+                        else if(typeof v === 'object') {
+                            const cap = capitalize(k);
+                            type = cap;
+                            const res = genKotlin(v, cap);
+                            nested += res.cls + "\n";
+                            valStr = `${cap}(\n        ${res.args.replace(/\n/g, '\n        ')}    )`;
+                        }
+                    }
+                    props += `    val ${k}: ${type}? = null,\n`;
+                    args += `${k} = ${valStr},\n        `;
+                });
+                return { cls: `data class ${className}(\n${props})${nested ? '\n\n' + nested : ''}`, args };
+            };
+
+            const generate = () => {
+                try {
+                    const json = JSON.parse(input);
+                    if(lang === 'java') {
+                        const res = genJava(json, 'Root');
+                        setOutput(`${res.cls}\n// Main Usage:\npublic static void main(String[] args) {\n    Root obj = new Root();\n${res.setters}    System.out.println(obj);\n}`);
+                    } else {
+                        const res = genKotlin(json, 'Root');
+                        setOutput(`${res.cls}\n\nfun main() {\n    val obj = Root(\n        ${res.args}    )\n    println(obj)\n}`);
+                    }
+                } catch(e) { setOutput('Invalid JSON'); }
+            };
+            
+            useEffect(() => { if(input) generate(); }, [input, lang]);
+
+            return (
+                <div className="flex h-full p-4 gap-4">
+                    <div className="w-1/2 flex flex-col">
+                        <label className="text-monokai-dim mb-2">Input JSON</label>
+                        <textarea value={input} onChange={e=>setInput(e.target.value)} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card code-font resize-none" placeholder='{"a": 1}'></textarea>
+                    </div>
+                    <div className="w-1/2 flex flex-col bg-monokai-sidebar p-2 rounded border border-monokai-card">
+                        <div className="flex justify-between mb-2">
+                            <select value={lang} onChange={e=>setLang(e.target.value)} className="bg-monokai-card p-1 rounded"><option value="java">Java</option><option value="kotlin">Kotlin</option></select>
+                            <button onClick={()=>copyToClipboard(output)}><Icon path={Icons.Copy} size={4}/></button>
+                        </div>
+                        <textarea readOnly value={output} className="flex-1 bg-transparent text-monokai-blue code-font resize-none outline-none"></textarea>
+                    </div>
+                </div>
+            );
+        };
+
+        const JsonDiffTool = () => {
+            const [l, setL] = useState('');
+            const [r, setR] = useState('');
+            const [lines, setLines] = useState([]);
+            const [stats, setStats] = useState({ missingKeys: 0, diffVals: 0, total: 0 });
+
+            const runDiff = () => {
+                try {
+                    const sort = (o) => {
+                        if(typeof o !== 'object' || o === null) return o;
+                        if(Array.isArray(o)) return o.map(sort);
+                        return Object.keys(o).sort().reduce((a,k)=>{a[k]=sort(o[k]);return a;},{});
+                    };
+                    const lObj = sort(JSON.parse(l));
+                    const rObj = sort(JSON.parse(r));
+                    const lStr = JSON.stringify(lObj, null, 2).split('\n');
+                    const rStr = JSON.stringify(rObj, null, 2).split('\n');
+                    
+                    const res = [];
+                    let i = 0, j = 0;
+                    let missing = 0, diffs = 0;
+
+                    const getKey = (s) => { const m = s.match(/"(.*?)":/); return m ? m[1] : null; };
+
+                    // Advanced diff logic to handle end-of-object mismatches
+                    while(i < lStr.length || j < rStr.length) {
+                        const left = lStr[i] || '';
+                        const right = rStr[j] || '';
+                        const lKey = getKey(left);
+                        const rKey = getKey(right);
+
+                        // Case 1: Identical lines
+                        if(left === right) {
+                            res.push({l: left, r: right, type: 'same'});
+                            i++; j++;
+                        } 
+                        // Case 2: Key Mismatch logic
+                        else if (lKey && rKey) {
+                            if (lKey === rKey) {
+                                // Same key, diff value -> Change
+                                res.push({l: left, r: right, type: 'change'});
+                                diffs++; i++; j++;
+                            } else if (lKey < rKey) {
+                                // Left key comes first -> Missing in Right (Removed)
+                                res.push({l: left, r: '', type: 'del'});
+                                missing++; i++;
+                            } else {
+                                // Right key comes first -> Missing in Left (Added)
+                                res.push({l: '', r: right, type: 'add'});
+                                missing++; j++;
+                            }
+                        }
+                        // Case 3: Structure mismatch (Braces vs Keys)
+                        // If one side has a key and other has brace/nothing
+                        else if (lKey && !rKey) {
+                            res.push({l: left, r: '', type: 'del'}); // Left has key, Right ended/brace
+                            missing++; i++;
+                        } else if (!lKey && rKey) {
+                            res.push({l: '', r: right, type: 'add'}); // Right has key, Left ended/brace
+                            missing++; j++;
+                        } 
+                        // Case 4: Brace mismatches or values
+                        else {
+                            if (left && !right) { res.push({l:left, r:'', type:'del'}); i++; missing++; }
+                            else if (!left && right) { res.push({l:'', r:right, type:'add'}); j++; missing++; }
+                            else { res.push({l:left, r:right, type:'change'}); i++; j++; diffs++; }
+                        }
+                    }
+                    setLines(res);
+                    setStats({ missingKeys: missing, diffVals: diffs, total: missing + diffs });
+                } catch(e) { alert("Invalid JSON"); }
+            };
+
+            return (
+                <div className="flex flex-col h-full p-4">
+                    <div className="flex gap-4 h-1/3 mb-2">
+                        <textarea value={l} onChange={e=>setL(e.target.value)} className="w-1/2 bg-monokai-black p-2 rounded border border-monokai-card code-font text-xs" placeholder="Left JSON"></textarea>
+                        <textarea value={r} onChange={e=>setR(e.target.value)} className="w-1/2 bg-monokai-black p-2 rounded border border-monokai-card code-font text-xs" placeholder="Right JSON"></textarea>
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                        <button onClick={runDiff} className="bg-monokai-purple text-black font-bold py-1 px-4 rounded">Compare</button>
+                        <div className="text-xs text-monokai-dim flex gap-4">
+                            <span className="text-monokai-pink">Missing/Added Keys: {stats.missingKeys}</span>
+                            <span className="text-monokai-orange">Diff Values: {stats.diffVals}</span>
+                            <span className="text-white font-bold">Total: {stats.total}</span>
+                        </div>
+                    </div>
+                    <div className="flex-1 bg-monokai-sidebar border border-monokai-card overflow-auto">
+                        {lines.map((ln, i) => (
+                            <div key={i} className="flex text-xs code-font border-b border-monokai-card/20 hover:bg-white/5">
+                                <div className={`w-1/2 p-0.5 whitespace-pre ${ln.type==='del'?'diff-rem':(ln.type==='add'?'diff-empty':(ln.type==='change'?'diff-change':''))}`}>{ln.l}</div>
+                                <div className={`w-1/2 p-0.5 whitespace-pre border-l border-monokai-card ${ln.type==='add'?'diff-add':(ln.type==='del'?'diff-empty':(ln.type==='change'?'diff-change':''))}`}>{ln.r}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const JsonStringTool = () => {
+            const [json, setJson] = useState('');
+            const [str, setStr] = useState('');
+            
+            // To Str: Input JSON Object -> Output Escaped String
+            const toStr = () => { 
+                try { 
+                    // If input is valid json object, stringify it
+                    // e.g. {"a":1} -> "{\"a\":1}"
+                    const parsed = JSON.parse(json);
+                    setStr(JSON.stringify(JSON.stringify(parsed))); 
+                } catch(e) { 
+                    // If input is text, just stringify text
+                    setStr(JSON.stringify(json));
+                } 
+            };
+            
+            // To Json: Input Escaped String -> Output Prettified Object
+            const toJson = () => { 
+                try { 
+                    // e.g. "{\"a\":1}" -> {"a":1}
+                    const parsed = JSON.parse(str);
+                    if(typeof parsed === 'string') {
+                        setJson(JSON.stringify(JSON.parse(parsed), null, 2));
+                    } else {
+                        setJson(JSON.stringify(parsed, null, 2));
+                    }
+                } catch(e) { setJson("Invalid Stringified JSON"); } 
+            };
+
+            const prettifyJson = () => { try { setJson(JSON.stringify(JSON.parse(json), null, 2)); } catch(e){} };
+
+            return (
+                <div className="flex h-full p-4 gap-4 items-center">
+                    <div className="flex-1 h-full flex flex-col">
+                        <div className="flex justify-between mb-2">
+                            <span className="text-monokai-accent font-bold">JSON Object</span>
+                            <div className="space-x-2">
+                                <button onClick={()=>setJson('')} className="text-xs">Clear</button>
+                                <button onClick={prettifyJson} className="text-xs bg-monokai-card px-2 rounded">Prettify</button>
+                                <button onClick={()=>copyToClipboard(json)}><Icon path={Icons.Copy} size={3}/></button>
+                            </div>
+                        </div>
+                        <textarea value={json} onChange={e=>setJson(e.target.value)} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card code-font resize-none" placeholder='{"key": "value"}'></textarea>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <button onClick={toStr} className="bg-monokai-card p-2 rounded hover:bg-monokai-purple"><Icon path={Icons.ChevronRight} size={6}/></button>
+                        <button onClick={toJson} className="bg-monokai-card p-2 rounded hover:bg-monokai-purple rotate-180"><Icon path={Icons.ChevronRight} size={6}/></button>
+                    </div>
+                    <div className="flex-1 h-full flex flex-col">
+                        <div className="flex justify-between mb-2">
+                            <span className="text-monokai-green font-bold">Escaped String</span>
+                            <div className="space-x-2">
+                                <button onClick={()=>setStr('')} className="text-xs">Clear</button>
+                                <button onClick={()=>copyToClipboard(str)}><Icon path={Icons.Copy} size={3}/></button>
+                            </div>
+                        </div>
+                        <textarea value={str} onChange={e=>setStr(e.target.value)} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card code-font resize-none" placeholder='"{\"key\": \"value\"}"'></textarea>
+                    </div>
+                </div>
+            );
+        };
+
+        const JsonObjectTool = () => {
+            const [input, setInput] = useState('');
+            const [output, setOutput] = useState('');
+            
+            const convert = () => {
+                let res = input;
+                // 1. Remove outer class names (Class(...)) -> { ... }
+                res = res.replace(/([a-zA-Z0-9_]+)\s*\(/g, '{');
+                res = res.replace(/\)/g, '}');
+                // 2. Replace = with : but ONLY if it looks like a key=value pair (to avoid breaking urls/timestamps)
+                // Look for word followed by =
+                res = res.replace(/([a-zA-Z0-9_]+)=/g, '"$1":');
+                
+                // 3. Quote unquoted values (approximate)
+                // This regex looks for : value , or : value } and quotes value if not digit/bool/null/brace
+                // It is tricky. We'll try to quote things that look like strings.
+                // Simple approach: Match : <text> [,}]
+                res = res.replace(/:\s*([^,\{\}\[\]"]+?)\s*(?=[,}])/g, (match, val) => {
+                    const v = val.trim();
+                    if(v === 'null' || v === 'true' || v === 'false' || !isNaN(Number(v))) return match;
+                    return `:"${v}"`;
+                });
+
+                try { 
+                    const obj = JSON.parse(res); 
+                    setOutput(JSON.stringify(obj, null, 2)); 
+                } catch(e) { 
+                    setOutput(res + "\n\n// Error: Parse failed. Please check for unhandled characters.\n// Error Details: " + e.message); 
+                }
+            };
+
+            return (
+                <div className="flex h-full p-4 gap-4">
+                    <div className="w-1/2 flex flex-col">
+                        <div className="mb-2 flex justify-between">
+                            <span className="text-monokai-accent font-bold">toString() Output</span>
+                            <div className="space-x-2">
+                                <button onClick={()=>setInput('')} className="text-xs">Clear</button>
+                                <button onClick={()=>copyToClipboard(input)}><Icon path={Icons.Copy} size={3}/></button>
+                            </div>
+                        </div>
+                        <textarea value={input} onChange={e=>setInput(e.target.value)} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card code-font resize-none" placeholder="User(id=1, name=John)"></textarea>
+                    </div>
+                    <div className="flex flex-col justify-center"><button onClick={convert} className="bg-monokai-card p-2 rounded hover:bg-monokai-purple"><Icon path={Icons.Play} size={6}/></button></div>
+                    <div className="w-1/2 flex flex-col">
+                        <div className="mb-2 flex justify-between">
+                            <span className="text-monokai-green font-bold">JSON</span>
+                            <button onClick={()=>copyToClipboard(output)}><Icon path={Icons.Copy} size={3}/></button>
+                        </div>
+                        <textarea value={output} className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card code-font resize-none text-monokai-green" readOnly></textarea>
+                    </div>
+                </div>
+            );
+        };
+
+        const JsonStudio = () => {
+            const [tab, setTab] = useState('format');
+            return (
+                <div className="flex flex-col h-full">
+                    <div className="bg-monokai-sidebar border-b border-monokai-card p-2 flex justify-center space-x-4">
+                        {['format', 'gen', 'diff', 'str', 'obj'].map(t => (
+                            <button key={t} onClick={() => setTab(t)} className={`font-bold uppercase text-xs px-4 py-1 rounded ${tab===t?'bg-monokai-card text-white':'text-monokai-dim'}`}>{t}</button>
+                        ))}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <div style={{display: tab==='format'?'block':'none', height:'100%'}}><JsonFormatTool/></div>
+                        <div style={{display: tab==='gen'?'block':'none', height:'100%'}}><JsonGeneratorTool/></div>
+                        <div style={{display: tab==='diff'?'block':'none', height:'100%'}}><JsonDiffTool/></div>
+                        <div style={{display: tab==='str'?'block':'none', height:'100%'}}><JsonStringTool/></div>
+                        <div style={{display: tab==='obj'?'block':'none', height:'100%'}}><JsonObjectTool/></div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // MODULE: JWT STATION
+        // ==========================================
+
+        const JwtPayloadRenderer = ({ payload }) => {
+            if (!payload) return <pre className="text-xs code-font text-monokai-blue">...</pre>;
+
+            const formatTime = (ts) => new Date(ts * 1000).toLocaleString();
+
+            return (
+                <div className="text-xs code-font text-monokai-text">
+                    <span>{'{'}</span>
+                    <div className="pl-4">
+                        {Object.entries(payload).map(([k, v], i, arr) => {
+                            const isTime = ['iat', 'exp', 'nbf'].includes(k) && typeof v === 'number';
+                            const isLast = i === arr.length - 1;
+                            return (
+                                <div key={k} className="hover:bg-white/5">
+                                    <span className="text-monokai-orange">"{k}"</span>:{" "}
+                                    {isTime ? (
+                                        <span className="text-monokai-purple cursor-help relative group border-b border-dashed border-monokai-dim">
+                                            {v}
+                                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-black text-white text-[10px] p-1 rounded whitespace-nowrap z-50 border border-monokai-card shadow-xl">
+                                                {formatTime(v)}
+                                            </span>
+                                        </span>
+                                    ) : (
+                                        <span className={typeof v === 'string' ? 'text-monokai-accent' : 'text-monokai-purple'}>
+                                            {typeof v === 'string' ? `"${v}"` : JSON.stringify(v)}
+                                        </span>
+                                    )}
+                                    {!isLast && ","}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <span>{'}'}</span>
+                </div>
+            );
+        };
+
+        const JwtKnowledgeBase = () => {
+            return (
+                <div>
+                    <h3 className="text-monokai-accent font-bold mb-4 flex items-center"><Icon path={Icons.Info} size={4} className="mr-2"/> Knowledge Base</h3>
+                    <div className="space-y-4 text-xs text-monokai-dim text-left">
+                        <div className="mb-2">
+                            <strong className="text-white block">Why JWT?</strong>
+                            <p>Stateless authentication. No session lookup needed in DB. Good for microservices.</p>
+                        </div>
+                        <div className="mb-2">
+                            <strong className="text-white block">When to use?</strong>
+                            <p>API Authentication, Information Exchange (securely transmitting info between parties).</p>
+                        </div>
+                        <div className="mb-2">
+                            <strong className="text-white block">How it works?</strong>
+                            <p>Three parts: Header (Algo), Payload (Data), Signature (Verify). Separated by dots.</p>
+                        </div>
+                        <div className="mb-2">
+                            <strong className="text-white block">Key Security Tips:</strong>
+                            <ul className="list-disc pl-4 mt-1">
+                                <li>Always use HTTPS.</li>
+                                <li>Short expiration times (exp claim).</li>
+                                <li>Don't put secrets in payload (it's visible!).</li>
+                                <li>Validate signature on server.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const JwtStation = () => {
+            const [mode, setMode] = useState('decode');
+            const [token, setToken] = useState('');
+            const [header, setHeader] = useState('{\n  "alg": "HS256",\n  "typ": "JWT"\n}');
+            const [payload, setPayload] = useState('{\n  "sub": "123",\n  "name": "Dev",\n  "iat": 1516239022\n}');
+            const [secret, setSecret] = useState('secret');
+            const [genToken, setGenToken] = useState('');
+
+            const decoded = useMemo(() => {
+                try {
+                    const [h, p] = token.split('.');
+                    return { h: JSON.parse(atob(h)), p: JSON.parse(atob(p)) };
+                } catch(e) { return { h: null, p: null }; }
+            }, [token]);
+
+            const createToken = () => {
+                try {
+                    const h = Base64Url.stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(JSON.parse(header))));
+                    const p = Base64Url.stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(JSON.parse(payload))));
+                    const s = Base64Url.stringify(CryptoJS.HmacSHA256(h + "." + p, secret));
+                    setGenToken(`${h}.${p}.${s}`);
+                } catch(e) { alert("Invalid JSON"); }
+            };
+
+            return (
+                <div className="flex h-full">
+                    <div className="w-16 bg-monokai-sidebar border-r border-monokai-card pt-4 flex flex-col items-center">
+                        <button onClick={()=>setMode('decode')} className={`p-2 mb-2 rounded ${mode==='decode'?'bg-monokai-orange text-black':'text-monokai-dim'}`}>DEC</button>
+                        <button onClick={()=>setMode('create')} className={`p-2 rounded ${mode==='create'?'bg-monokai-orange text-black':'text-monokai-dim'}`}>CRE</button>
+                    </div>
+                    <div className="flex-1 p-6 overflow-auto">
+                        {mode === 'decode' ? (
+                            <div className="grid grid-cols-2 gap-6 h-full">
+                                <textarea value={token} onChange={e=>setToken(e.target.value)} className="bg-monokai-black p-4 rounded border border-monokai-card code-font text-monokai-pink resize-none" placeholder="Paste Token..."></textarea>
+                                <div className="space-y-4">
+                                    <div className="bg-monokai-sidebar p-4 rounded border border-monokai-card">
+                                        <strong className="text-monokai-purple block mb-2">Header</strong>
+                                        <pre className="text-xs code-font text-monokai-purple">{JSON.stringify(decoded.h,null,2)}</pre>
+                                    </div>
+                                    <div className="bg-monokai-sidebar p-4 rounded border border-monokai-card relative">
+                                        <button onClick={() => copyToClipboard(JSON.stringify(decoded.p,null,2))} className="absolute top-2 right-2 text-monokai-dim"><Icon path={Icons.Copy} size={3}/></button>
+                                        <strong className="text-monokai-blue block mb-2">Payload</strong>
+                                        <JwtPayloadRenderer payload={decoded.p} />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-4 max-w-3xl mx-auto">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <textarea value={header} onChange={e=>setHeader(e.target.value)} className="h-40 bg-monokai-black p-2 rounded border border-monokai-card code-font text-xs"></textarea>
+                                    <textarea value={payload} onChange={e=>setPayload(e.target.value)} className="h-40 bg-monokai-black p-2 rounded border border-monokai-card code-font text-xs"></textarea>
+                                </div>
+                                <input value={secret} onChange={e=>setSecret(e.target.value)} placeholder="Secret" className="w-full bg-monokai-black p-2 rounded border border-monokai-card"/>
+                                <button onClick={createToken} className="bg-monokai-orange text-black font-bold px-6 py-2 rounded">Create Token</button>
+                                <textarea readOnly value={genToken} className="w-full h-24 bg-monokai-black p-2 rounded border border-monokai-card code-font text-monokai-green"></textarea>
+                            </div>
+                        )}
+                    </div>
+                    {/* Integrated Knowledge Base Panel */}
+                    <div className="w-64 bg-monokai-sidebar border-l border-monokai-card p-4 hidden md:block overflow-auto">
+                        <JwtKnowledgeBase />
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // MAIN APP SHELL
+        // ==========================================
+        
+        const DlsNexus = () => {
+            const [activeModule, setActiveModule] = useState('api');
+            const [workspaces, setWorkspaces] = useState([]);
+            const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+            
+            useEffect(() => {
+                const saved = localStorage.getItem('dls_nexus_data');
+                if (saved) {
+                    try {
+                        const data = JSON.parse(saved);
+                        setWorkspaces(data.workspaces || []);
+                        if(data.workspaces?.length) setActiveWorkspaceId(data.workspaces[0].id);
+                    } catch(e) {}
+                } else {
+                    const def = { id: generateId(), name: 'Default', requests: [], env: {} };
+                    setWorkspaces([def]);
+                    setActiveWorkspaceId(def.id);
+                }
+            }, []);
+
+            useEffect(() => {
+                if (workspaces.length > 0) localStorage.setItem('dls_nexus_data', JSON.stringify({ workspaces }));
+            }, [workspaces]);
+
+            const NavItem = ({ id, icon, label, color }) => (
+                <button onClick={() => setActiveModule(id)} className={`w-16 h-16 flex flex-col items-center justify-center transition-colors border-l-2 ${activeModule === id ? `bg-monokai-bg border-${color} text-${color}` : 'border-transparent text-monokai-dim hover:text-white hover:bg-monokai-card'}`}>
+                    <Icon path={icon} size={6} className="mb-1" />
+                    <span className="text-[10px] uppercase font-bold tracking-wider">{label}</span>
+                </button>
+            );
+
+            return (
+                <div className="flex h-full w-full bg-monokai-bg">
+                    <div className="w-16 bg-monokai-sidebar border-r border-monokai-card flex flex-col items-center py-4 z-20 shadow-xl">
+                        <div className="mb-6 text-monokai-accent font-bold text-xl tracking-tighter">DLS</div>
+                        <NavItem id="api" icon={Icons.Zap} label="API" color="monokai-accent" />
+                        <NavItem id="crypto" icon={Icons.Shield} label="Crypto" color="monokai-purple" />
+                        <NavItem id="json" icon={Icons.FileText} label="JSON" color="monokai-green" />
+                        <NavItem id="jwt" icon={Icons.Key} label="JWT" color="monokai-orange" />
+                    </div>
+
+                    <div className="flex-1 overflow-hidden relative">
+                        <div style={{display: activeModule === 'api' ? 'block' : 'none', height: '100%'}}>
+                            <ApiForge workspaces={workspaces} setWorkspaces={setWorkspaces} activeWorkspaceId={activeWorkspaceId} setActiveWorkspaceId={setActiveWorkspaceId} />
+                        </div>
+                        <div style={{display: activeModule === 'crypto' ? 'block' : 'none', height: '100%'}}>
+                            <CryptoLab />
+                        </div>
+                        <div style={{display: activeModule === 'json' ? 'block' : 'none', height: '100%'}}>
+                            <JsonStudio />
+                        </div>
+                        <div style={{display: activeModule === 'jwt' ? 'block' : 'none', height: '100%'}}>
+                            <JwtStation />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<DlsNexus />);
+    </script>
+</body>
+</html>
