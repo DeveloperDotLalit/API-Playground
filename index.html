@@ -21,6 +21,12 @@
     <!-- JSEncrypt (RSA) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.3.2/jsencrypt.min.js"></script>
 
+      <!-- QR Code Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js"></script>
+
+    <!-- QR Code Scanning -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
     <!-- Tailwind Config for Monokai Pro Theme -->
     <script>
         tailwind.config = {
@@ -113,10 +119,13 @@
             Maximize: <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />,
             Minimize: <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />,
             Download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,
+            Upload: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />,
             Lock: <path d="M19 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2zm-7-9a2 2 0 0 1 2 2v5h-4V4a2 2 0 0 1 2-2z" />,
             Unlock: <path d="M7 11V7a5 5 0 0 1 10 0v4" />,
             ChevronRight: <path d="M9 18l6-6-6-6" />,
-            Terminal: <path d="M4 17l6-6-6-6M12 19h8" />
+            Terminal: <path d="M4 17l6-6-6-6M12 19h8" />,
+            Edit: <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />,
+            QrCode: <path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h6v6h-6zM21 15v-3h3v3zM18 18h3v3h-3zM9 3h3v3H9zM3 9h3v3H3zM12 12h3v3h-3z" />
         };
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -1674,6 +1683,227 @@
         };
 
         // ==========================================
+        // MODULE: QR STATION
+        // ==========================================
+        const QrStation = () => {
+            const [activeTab, setActiveTab] = useState('generate');
+            const [qrText, setQrText] = useState('');
+            const [qrLevel, setQrLevel] = useState('M');
+            const [qrImage, setQrImage] = useState('');
+            const [qrTitle, setQrTitle] = useState('');
+            const [scanResult, setScanResult] = useState('');
+            // Expanded UPI State
+            const [upi, setUpi] = useState({ pa:'', pn:'', am:'', tn:'', mc:'', tid:'', tr:'', url:'', mam:'' });
+            const [isScanning, setIsScanning] = useState(false);
+            const fileInputRef = useRef(null);
+            const scannerRef = useRef(null);
+            const isScanningRef = useRef(false); // Track running state for cleanup
+
+            useEffect(() => {
+                isScanningRef.current = isScanning;
+            }, [isScanning]);
+
+            useEffect(() => {
+                // Cleanup function when component unmounts or tab changes
+                return () => {
+                    if (scannerRef.current && isScanningRef.current) {
+                        scannerRef.current.stop().then(() => {
+                            scannerRef.current.clear();
+                        }).catch(err => {
+                            // Fail silent on cleanup race conditions
+                            console.warn("Scanner cleanup exception:", err);
+                        });
+                    }
+                };
+            }, [activeTab]); // Only triggers when tab changes
+
+            // Generate QR
+            useEffect(() => {
+                if(qrText) {
+                    QRCode.toDataURL(qrText, { errorCorrectionLevel: qrLevel, margin: 2, width: 300 }, (err, url) => {
+                        if(!err) setQrImage(url);
+                    });
+                } else { setQrImage(''); }
+            }, [qrText, qrLevel]);
+
+            const downloadQr = () => {
+                if(!qrImage) return;
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.onload = () => {
+                    canvas.width = img.width + 40;
+                    canvas.height = img.height + (qrTitle ? 60 : 40);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    if(qrTitle) {
+                        ctx.font = 'bold 20px sans-serif';
+                        ctx.fillStyle = '#000';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(qrTitle, canvas.width/2, 30);
+                    }
+                    ctx.drawImage(img, 20, qrTitle ? 50 : 20);
+                    const a = document.createElement('a');
+                    a.href = canvas.toDataURL('image/png');
+                    a.download = `qr-code-${Date.now()}.png`;
+                    a.click();
+                };
+                img.src = qrImage;
+            };
+
+            const generateUpi = () => {
+                if(!upi.pa) return;
+                let str = `upi://pay?pa=${upi.pa}&pn=${encodeURIComponent(upi.pn)}`;
+                if(upi.mc) str += `&mc=${upi.mc}`;
+                if(upi.tid) str += `&tid=${upi.tid}`;
+                if(upi.tr) str += `&tr=${upi.tr}`;
+                if(upi.tn) str += `&tn=${encodeURIComponent(upi.tn)}`;
+                if(upi.am) str += `&am=${upi.am}`;
+                if(upi.mam) str += `&mam=${upi.mam}`;
+                if(upi.url) str += `&url=${encodeURIComponent(upi.url)}`;
+                str += "&cu=INR";
+                
+                setQrText(str);
+                setActiveTab('generate');
+            };
+
+            // Scan Image
+            const handleScanImage = (e) => {
+                const file = e.target.files[0];
+                if(!file) return;
+                const html5QrCode = new Html5Qrcode("reader");
+                html5QrCode.scanFile(file, true)
+                    .then(decodedText => { 
+                        setScanResult(decodedText);
+                        // Clean up instance immediately after single file scan
+                        html5QrCode.clear(); 
+                    })
+                    .catch(err => { 
+                        setScanResult("Error scanning file."); 
+                        html5QrCode.clear(); 
+                    });
+            };
+
+            // Camera Scan
+            const toggleScan = () => {
+                if(isScanning) {
+                    if(scannerRef.current) {
+                        scannerRef.current.stop().then(() => {
+                            scannerRef.current.clear();
+                            setIsScanning(false);
+                        });
+                    }
+                } else {
+                    const scanner = new Html5Qrcode("camera-reader");
+                    scannerRef.current = scanner;
+                    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
+                        (decodedText) => { setScanResult(decodedText); scanner.stop().then(() => { scanner.clear(); setIsScanning(false); }); },
+                        (errorMessage) => {}
+                    ).then(() => setIsScanning(true));
+                }
+            };
+
+            const clearScan = () => setScanResult('');
+
+            return (
+                <div className="flex h-full">
+                    <div className="w-64 bg-monokai-sidebar border-r border-monokai-card flex flex-col p-4 gap-2">
+                        <button onClick={()=>setActiveTab('generate')} className={`p-2 rounded text-left text-xs ${activeTab==='generate'?'bg-monokai-card text-white':'text-monokai-dim'}`}>Generator</button>
+                        <button onClick={()=>setActiveTab('upi')} className={`p-2 rounded text-left text-xs ${activeTab==='upi'?'bg-monokai-card text-white':'text-monokai-dim'}`}>UPI Builder</button>
+                        <button onClick={()=>setActiveTab('scan_img')} className={`p-2 rounded text-left text-xs ${activeTab==='scan_img'?'bg-monokai-card text-white':'text-monokai-dim'}`}>Scan Image</button>
+                        <button onClick={()=>setActiveTab('scan_cam')} className={`p-2 rounded text-left text-xs ${activeTab==='scan_cam'?'bg-monokai-card text-white':'text-monokai-dim'}`}>Scan Camera</button>
+                    </div>
+                    <div className="flex-1 p-6 overflow-auto flex flex-col items-center">
+                        {activeTab === 'generate' && (
+                            <div className="w-full max-w-md space-y-4">
+                                <h2 className="text-xl font-bold text-monokai-accent">QR Generator</h2>
+                                <textarea value={qrText} onChange={e=>setQrText(e.target.value)} className="w-full bg-monokai-black p-3 rounded border border-monokai-card code-font h-24" placeholder="Enter text or URL..."></textarea>
+                                <div className="flex gap-2 items-center">
+                                    <label className="text-xs text-monokai-dim">ECC Level:</label>
+                                    <select value={qrLevel} onChange={e=>setQrLevel(e.target.value)} className="bg-monokai-card p-1 rounded text-xs"><option value="L">L (Low)</option><option value="M">M (Medium)</option><option value="Q">Q (Quartile)</option><option value="H">H (High)</option></select>
+                                </div>
+                                {qrImage && (
+                                    <div className="bg-white p-4 rounded flex flex-col items-center gap-4">
+                                        <img src={qrImage} className="w-48 h-48" />
+                                        <div className="flex gap-2 w-full">
+                                            <input value={qrTitle} onChange={e=>setQrTitle(e.target.value)} placeholder="Optional Title" className="flex-1 bg-gray-100 text-black p-2 rounded border border-gray-300 text-xs"/>
+                                            <button onClick={downloadQr} className="bg-monokai-green text-black px-4 py-2 rounded text-xs font-bold">Download</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {activeTab === 'upi' && (
+                            <div className="w-full max-w-md space-y-4">
+                                <h2 className="text-xl font-bold text-monokai-green">UPI QR Builder</h2>
+                                
+                                <div className="space-y-2">
+                                    <label className="text-xs text-monokai-dim uppercase font-bold">Payee Details</label>
+                                    <input value={upi.pa} onChange={e=>setUpi({...upi, pa:e.target.value})} placeholder="VPA (Required, e.g. name@upi)" className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                    <input value={upi.pn} onChange={e=>setUpi({...upi, pn:e.target.value})} placeholder="Payee Name (Optional)" className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                    <input value={upi.mc} onChange={e=>setUpi({...upi, mc:e.target.value})} placeholder="Merchant Code (Optional)" className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs text-monokai-dim uppercase font-bold">Transaction Details</label>
+                                    <input value={upi.tr} onChange={e=>setUpi({...upi, tr:e.target.value})} placeholder="Transaction Ref ID (Optional)" className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                    <input value={upi.tid} onChange={e=>setUpi({...upi, tid:e.target.value})} placeholder="Transaction ID (Optional)" className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                    <input value={upi.url} onChange={e=>setUpi({...upi, url:e.target.value})} placeholder="Ref URL (Optional)" className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs text-monokai-dim uppercase font-bold">Amount & Info</label>
+                                    <div className="flex gap-2">
+                                        <input value={upi.am} onChange={e=>setUpi({...upi, am:e.target.value})} placeholder="Amount" className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                        <input value={upi.mam} onChange={e=>setUpi({...upi, mam:e.target.value})} placeholder="Min Amount" className="flex-1 bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                    </div>
+                                    <input value={upi.tn} onChange={e=>setUpi({...upi, tn:e.target.value})} placeholder="Note (Optional)" className="w-full bg-monokai-black p-2 rounded border border-monokai-card text-sm"/>
+                                </div>
+
+                                <button onClick={generateUpi} className="w-full bg-monokai-green text-black font-bold py-2 rounded mt-4 hover:opacity-90 transition-opacity">Generate UPI QR</button>
+                            </div>
+                        )}
+                        {activeTab === 'scan_img' && (
+                            <div className="w-full max-w-md space-y-4">
+                                <h2 className="text-xl font-bold text-monokai-blue">Scan from Image</h2>
+                                <input type="file" accept="image/*" onChange={handleScanImage} className="w-full bg-monokai-card p-2 rounded text-xs"/>
+                                <div id="reader" className="hidden"></div>
+                                {scanResult && (
+                                    <div className="bg-monokai-card p-4 rounded border border-monokai-green relative">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="text-xs text-monokai-green">Result:</label>
+                                            <button onClick={clearScan} className="text-monokai-pink hover:text-white"><Icon path={Icons.Trash} size={4}/></button>
+                                        </div>
+                                        <textarea readOnly value={scanResult} className="w-full bg-transparent outline-none resize-none h-24 text-white code-font"></textarea>
+                                        <button onClick={()=>copyToClipboard(scanResult)} className="text-xs text-monokai-dim hover:text-white mt-2">Copy Result</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {activeTab === 'scan_cam' && (
+                            <div className="w-full max-w-md space-y-4 flex flex-col items-center">
+                                <h2 className="text-xl font-bold text-monokai-blue">Scan from Camera</h2>
+                                <div id="camera-reader" className="w-full h-64 bg-black rounded overflow-hidden"></div>
+                                <button onClick={toggleScan} className={`px-6 py-2 rounded font-bold ${isScanning?'bg-monokai-pink text-white':'bg-monokai-green text-black'}`}>{isScanning ? 'Stop Scanning' : 'Start Camera'}</button>
+                                {scanResult && (
+                                    <div className="bg-monokai-card p-4 rounded border border-monokai-green w-full mt-4 relative">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="text-xs text-monokai-green">Result:</label>
+                                            <button onClick={clearScan} className="text-monokai-pink hover:text-white"><Icon path={Icons.Trash} size={4}/></button>
+                                        </div>
+                                        <textarea readOnly value={scanResult} className="w-full bg-transparent outline-none resize-none h-24 text-white code-font"></textarea>
+                                        <button onClick={()=>copyToClipboard(scanResult)} className="text-xs text-monokai-dim hover:text-white mt-2">Copy Result</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
         // MAIN APP SHELL
         // ==========================================
         
@@ -1681,7 +1911,6 @@
             const [activeModule, setActiveModule] = useState('api');
             const [workspaces, setWorkspaces] = useState([]);
             const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
-            
             useEffect(() => {
                 const saved = localStorage.getItem('dls_nexus_data');
                 if (saved) {
@@ -1696,18 +1925,13 @@
                     setActiveWorkspaceId(def.id);
                 }
             }, []);
-
-            useEffect(() => {
-                if (workspaces.length > 0) localStorage.setItem('dls_nexus_data', JSON.stringify({ workspaces }));
-            }, [workspaces]);
-
+            useEffect(() => { if (workspaces.length > 0) localStorage.setItem('dls_nexus_data', JSON.stringify({ workspaces })); }, [workspaces]);
             const NavItem = ({ id, icon, label, color }) => (
                 <button onClick={() => setActiveModule(id)} className={`w-16 h-16 flex flex-col items-center justify-center transition-colors border-l-2 ${activeModule === id ? `bg-monokai-bg border-${color} text-${color}` : 'border-transparent text-monokai-dim hover:text-white hover:bg-monokai-card'}`}>
                     <Icon path={icon} size={6} className="mb-1" />
                     <span className="text-[10px] uppercase font-bold tracking-wider">{label}</span>
                 </button>
             );
-
             return (
                 <div className="flex h-full w-full bg-monokai-bg">
                     <div className="w-16 bg-monokai-sidebar border-r border-monokai-card flex flex-col items-center py-4 z-20 shadow-xl">
@@ -1716,21 +1940,14 @@
                         <NavItem id="crypto" icon={Icons.Shield} label="Crypto" color="monokai-purple" />
                         <NavItem id="json" icon={Icons.FileText} label="JSON" color="monokai-green" />
                         <NavItem id="jwt" icon={Icons.Key} label="JWT" color="monokai-orange" />
+                        <NavItem id="qr" icon={Icons.QrCode} label="QR" color="monokai-blue" />
                     </div>
-
                     <div className="flex-1 overflow-hidden relative">
-                        <div style={{display: activeModule === 'api' ? 'block' : 'none', height: '100%'}}>
-                            <ApiForge workspaces={workspaces} setWorkspaces={setWorkspaces} activeWorkspaceId={activeWorkspaceId} setActiveWorkspaceId={setActiveWorkspaceId} />
-                        </div>
-                        <div style={{display: activeModule === 'crypto' ? 'block' : 'none', height: '100%'}}>
-                            <CryptoLab />
-                        </div>
-                        <div style={{display: activeModule === 'json' ? 'block' : 'none', height: '100%'}}>
-                            <JsonStudio />
-                        </div>
-                        <div style={{display: activeModule === 'jwt' ? 'block' : 'none', height: '100%'}}>
-                            <JwtStation />
-                        </div>
+                        <div style={{display: activeModule === 'api' ? 'block' : 'none', height: '100%'}}><ApiForge workspaces={workspaces} setWorkspaces={setWorkspaces} activeWorkspaceId={activeWorkspaceId} setActiveWorkspaceId={setActiveWorkspaceId} /></div>
+                        <div style={{display: activeModule === 'crypto' ? 'block' : 'none', height: '100%'}}><CryptoLab /></div>
+                        <div style={{display: activeModule === 'json' ? 'block' : 'none', height: '100%'}}><JsonStudio /></div>
+                        <div style={{display: activeModule === 'jwt' ? 'block' : 'none', height: '100%'}}><JwtStation /></div>
+                        <div style={{display: activeModule === 'qr' ? 'block' : 'none', height: '100%'}}><QrStation /></div>
                     </div>
                 </div>
             );
